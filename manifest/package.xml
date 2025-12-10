@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <!-- Apex Classes -->
+    <types>
+        <members>*</members>
+        <name>ApexClass</name>
+    </types>
+    
+    <!-- Apex Triggers -->
+    <types>
+        <members>*</members>
+        <name>ApexTrigger</name>
+    </types>
+    
+    <!-- Lightning Web Components -->
+    <types>
+        <members>*</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    
+    <!-- Aura Components -->
+    <types>
+        <members>*</members>
+        <name>AuraDefinitionBundle</name>
+    </types>
+    
+    <!-- Visualforce Pages -->
+    <types>
+        <members>*</members>
+        <name>ApexPage</name>
+    </types>
+    
+    <!-- Visualforce Components -->
+    <types>
+        <members>*</members>
+        <name>ApexComponent</name>
+    </types>
+    
+    <!-- Static Resources -->
+    <types>
+        <members>*</members>
+        <name>StaticResource</name>
+    </types>
+    
+    <!-- Custom Objects -->
+    <types>
+        <members>*</members>
+        <name>CustomObject</name>
+    </types>
+    
+    <!-- Custom Fields (si nécessaire) -->
+    <types>
+        <members>Account.*</members>
+        <members>Contact.*</members>
+        <members>Opportunity.*</members>
+        <name>CustomField</name>
+    </types>
+    
+    <!-- Layouts -->
+    <types>
+        <members>*</members>
+        <name>Layout</name>
+    </types>
+    
+    <!-- Custom Tabs -->
+    <types>
+        <members>*</members>
+        <name>CustomTab</name>
+    </types>
+    
+    <!-- Permission Sets -->
+    <types>
+        <members>*</members>
+        <name>PermissionSet</name>
+    </types>
+    
+    <!-- Profiles (attention en production) -->
+    <types>
+        <members>Admin</members>
+        <members>Standard User</members>
+        <name>Profile</name>
+    </types>
+    
+    <!-- Flows -->
+    <types>
+        <members>*</members>
+        <name>Flow</name>
+    </types>
+    
+    <!-- Process Builder (legacy) -->
+    <types>
+        <members>*</members>
+        <name>Workflow</name>
+    </types>
+    
+    <!-- Email Templates -->
+    <types>
+        <members>*</members>
+        <name>EmailTemplate</name>
+    </types>
+    
+    <!-- Reports -->
+    <types>
+        <members>*</members>
+        <name>Report</name>
+    </types>
+    
+    <!-- Dashboards -->
+    <types>
+        <members>*</members>
+        <name>Dashboard</name>
+    </types>
+    
+    <!-- Custom Labels -->
+    <types>
+        <members>*</members>
+        <name>CustomLabel</name>
+    </types>
+    
+    <!-- Custom Metadata Types -->
+    <types>
+        <members>*</members>
+        <name>CustomMetadata</name>
+    </types>
+    
+    <!-- Remote Site Settings -->
+    <types>
+        <members>*</members>
+        <name>RemoteSiteSetting</name>
+    </types>
+    
+    <!-- Named Credentials -->
+    <types>
+        <members>*</members>
+        <name>NamedCredential</name>
+    </types>
+    
+    <!-- Custom Settings -->
+    <types>
+        <members>*</members>
+        <name>CustomSettings</name>
+    </types>
+    
+    <!-- Validation Rules -->
+    <types>
+        <members>*</members>
+        <name>ValidationRule</name>
+    </types>
+    
+    <!-- Record Types -->
+    <types>
+        <members>*</members>
+        <name>RecordType</name>
+    </types>
+    
+    <!-- Quick Actions -->
+    <types>
+        <members>*</members>
+        <name>QuickAction</name>
+    </types>
+    
+    <!-- Flexipages (Lightning Pages) -->
+    <types>
+        <members>*</members>
+        <name>FlexiPage</name>
+    </types>
+    
+    <!-- Custom Applications -->
+    <types>
+        <members>*</members>
+        <name>CustomApplication</name>
+    </types>
+    
+    <!-- API Version -->
+    <version>59.0</version>
+</Package>

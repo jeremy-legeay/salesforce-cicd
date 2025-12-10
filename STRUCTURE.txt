@@ -1,0 +1,163 @@
+📁 STRUCTURE DU PROJET CI/CD SALESFORCE
+========================================
+
+salesforce-cicd/
+│
+├── 📘 DOCUMENTATION
+│   ├── COMMENCEZ_ICI.md                   ⭐ FICHIER D'ENTRÉE PRINCIPAL
+│   ├── INDEX.md                           📋 Table des matières complète
+│   ├── QUICK_START.md                     🚀 Installation en 10 minutes
+│   ├── README.md                          📖 Documentation détaillée
+│   ├── DEV_WORKFLOW.md                    💻 Guide développement sur DEV (VS Code)
+│   ├── BEST_PRACTICES.md                  💡 Bonnes pratiques et conventions
+│   ├── GIT_COMMANDS.md                    🔀 Commandes Git essentielles
+│   ├── ENVIRONMENTS_SETUP.md              ⚙️  Configuration détaillée GitHub
+│   ├── FILE_STRUCTURE.md                  📋 Description de tous les fichiers
+│   └── STRUCTURE.txt                      📁 Ce fichier
+│
+├── 🔧 CONFIGURATION SALESFORCE
+│   ├── sfdx-project.json                  Configuration projet SFDX
+│   ├── .forceignore                       Exclusions de déploiement
+│   └── manifest/
+│       ├── package.xml                    ⚡ Métadonnées à déployer
+│       └── destructiveChanges.xml         🗑️  Suppressions (optionnel)
+│
+├── 🤖 GITHUB ACTIONS
+│   └── .github/
+│       └── workflows/
+│           └── salesforce-cicd.yml        🎯 Pipeline CI/CD
+│                                          • Démarre à partir d'INTEGRATION
+│                                          • Validation automatique
+│                                          • Déploiement avec approbation
+│                                          • Tests post-déploiement
+│
+├── 💻 CODE SALESFORCE
+│   └── force-app/
+│       └── main/
+│           └── default/
+│               └── classes/
+│                   ├── SmokeTestClass.cls         🧪 Tests de vérification
+│                   └── SmokeTestClass.cls-meta.xml
+│
+├── 📜 SCRIPTS
+│   └── scripts/
+│       └── deploy.sh                      🛠️  Déploiement manuel avancé
+│
+└── 🔒 CONFIGURATION GIT
+    └── .gitignore                         🚫 Exclusions Git
+
+
+🎯 PAR OÙ COMMENCER ?
+======================
+
+1. 📖 Lire COMMENCEZ_ICI.md (2 minutes)
+2. ⚙️  Suivre QUICK_START.md (10 minutes)
+3. 💻 Configurer VS Code pour DEV (5 minutes)
+4. 🧪 Tester le pipeline sur integration (15 minutes)
+5. 📚 Lire DEV_WORKFLOW.md pour le développement quotidien
+
+📊 ARCHITECTURE DES ENVIRONNEMENTS
+===================================
+
+┌──────────────┐
+│     DEV      │  ← Développement direct via VS Code
+│  (develop)   │     PAS de pipeline CI/CD
+└──────┬───────┘
+       │ merge
+       ▼
+┌──────────────┐
+│ INTEGRATION  │  ← 🚀 DÉBUT du pipeline CI/CD
+│(integration) │     1 reviewer requis
+└──────┬───────┘
+       │ merge
+       ▼
+┌──────────────┐
+│     UAT      │     2 reviewers requis
+│    (uat)     │
+└──────┬───────┘
+       │ merge
+       ▼
+┌──────────────┐
+│  PRODUCTION  │     2+ reviewers + 10 min timer
+│    (main)    │
+└──────────────┘
+
+🔑 SECRETS GITHUB REQUIS
+=========================
+
+⚠️ SEULEMENT 3 SECRETS NÉCESSAIRES (pas DEV) :
+
+Environment: INTEGRATION
+  └── SFDX_AUTH_URL_INTEGRATION
+
+Environment: UAT
+  └── SFDX_AUTH_URL_UAT
+
+Environment: PRODUCTION
+  └── SFDX_AUTH_URL_PRODUCTION
+
+DEV n'a pas besoin de secret car le développement
+se fait directement via VS Code !
+
+
+✅ CHECKLIST DE CONFIGURATION
+==============================
+
+□ Copier tous les fichiers dans votre repository
+□ Créer la structure .github/workflows/
+□ Créer les 3 environnements dans GitHub (pas DEV)
+□ Ajouter les 3 secrets SFDX_AUTH_URL (pas DEV)
+□ Configurer les branch protection rules
+□ Installer VS Code + Salesforce Extension Pack
+□ Authentifier VS Code à la sandbox DEV
+□ Tester développement sur DEV via VS Code
+□ Tester le pipeline sur integration
+□ Former l'équipe sur le workflow
+
+
+🔄 WORKFLOW QUOTIDIEN
+=====================
+
+1. DÉVELOPPEMENT SUR DEV (via VS Code)
+   • Deploy/Retrieve directement
+   • Tests locaux
+   • Commit dans 'develop'
+   
+2. PROMOTION VERS INTEGRATION (CI/CD démarre ici)
+   • git merge develop → integration
+   • Pipeline automatique
+   • 1 reviewer approuve
+   • Déploiement auto
+   
+3. PROMOTION VERS UAT
+   • git merge integration → uat
+   • 2 reviewers approuvent
+   • Déploiement auto
+   
+4. PROMOTION VERS PRODUCTION
+   • git merge uat → main
+   • 2+ reviewers + timer 10min
+   • Déploiement auto
+
+
+🆘 AIDE RAPIDE
+==============
+
+Développement DEV     → DEV_WORKFLOW.md
+Installation          → QUICK_START.md
+Commandes Git         → GIT_COMMANDS.md
+Configuration GitHub  → ENVIRONMENTS_SETUP.md
+Bonnes pratiques      → BEST_PRACTICES.md
+Dépannage            → README.md (section Dépannage)
+
+
+📞 SUPPORT
+==========
+
+Documentation officielle:
+- Salesforce DX: https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/
+- GitHub Actions: https://docs.github.com/en/actions
+- Salesforce CLI: https://developer.salesforce.com/docs/atlas.en-us.sfdx_cli_reference.meta/
+- VS Code Extensions: https://developer.salesforce.com/tools/vscode/
+
+Bon déploiement ! 🎉

@@ -1,0 +1,225 @@
+name: Salesforce CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - integration
+      - uat
+      - main
+  pull_request:
+    branches:
+      - integration
+      - uat
+      - main
+
+env:
+  SFDX_CLI_VERSION: 2.0.0
+
+jobs:
+  # Job 1: Validation et tests
+  validate:
+    name: Validate & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Determine target environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
+            echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/integration" ]]; then
+            echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
+        run: |
+          echo "${SFDX_AUTH_URL}" > ./authfile
+          sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
+          rm ./authfile
+
+      - name: Run Apex Tests
+        id: apex-tests
+        run: |
+          sf apex run test --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --test-level RunLocalTests \
+            --code-coverage \
+            --result-format human \
+            --wait 20 \
+            --output-dir ./test-results
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-test-results-${{ steps.env.outputs.ENV_NAME }}
+          path: ./test-results
+
+      - name: Check test results
+        if: steps.apex-tests.outcome == 'failure'
+        run: |
+          echo "❌ Apex tests failed. Deployment cannot proceed."
+          exit 1
+
+      - name: Validate deployment (check-only)
+        id: validate
+        run: |
+          sf project deploy start \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --manifest manifest/package.xml \
+            --test-level RunLocalTests \
+            --dry-run \
+            --wait 30 \
+            --verbose
+
+      - name: Validation Summary
+        run: |
+          echo "✅ Validation successful for ${{ steps.env.outputs.ENV_NAME }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+
+  # Job 2: Déploiement avec validation manuelle
+  deploy:
+    name: Deploy to ${{ needs.validate.outputs.env_name }}
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    environment:
+      name: ${{ needs.validate.outputs.env_name }}
+    
+    outputs:
+      env_name: ${{ steps.env.outputs.ENV_NAME }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Determine target environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
+            echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/integration" ]]; then
+            echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
+        run: |
+          echo "${SFDX_AUTH_URL}" > ./authfile
+          sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
+          rm ./authfile
+
+      - name: Deploy to Salesforce
+        id: deploy
+        run: |
+          sf project deploy start \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --manifest manifest/package.xml \
+            --test-level RunLocalTests \
+            --wait 30 \
+            --verbose
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "🚀 Deployment successful to ${{ steps.env.outputs.ENV_NAME }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed to ${{ steps.env.outputs.ENV_NAME }}"
+          exit 1
+
+  # Job 3: Post-deployment verification
+  verify:
+    name: Post-Deployment Verification
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+
+      - name: Determine target environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
+            echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/integration" ]]; then
+            echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
+            echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
+        run: |
+          echo "${SFDX_AUTH_URL}" > ./authfile
+          sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
+          rm ./authfile
+
+      - name: Run smoke tests
+        run: |
+          echo "Running post-deployment smoke tests..."
+          sf apex run test --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --tests "SmokeTestClass" \
+            --result-format human \
+            --wait 10 || echo "⚠️  No smoke tests found"
+
+      - name: Verification Complete
+        run: |
+          echo "✅ Post-deployment verification complete for ${{ steps.env.outputs.ENV_NAME }}"

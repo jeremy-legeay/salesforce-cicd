@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <!-- 
+    Ce fichier permet de supprimer des métadonnées lors du déploiement.
+    Utilisez-le avec précaution, surtout en PRODUCTION !
+    
+    Pour l'utiliser dans le workflow, ajoutez l'option :
+    - -postdestructivechanges manifest/destructiveChanges.xml
+    -->
+    
+    <!-- Exemple : Supprimer une classe Apex obsolète -->
+    <!--
+    <types>
+        <members>ObsoleteClass</members>
+        <members>OldUtilityClass</members>
+        <n>ApexClass</n>
+    </types>
+    -->
+    
+    <!-- Exemple : Supprimer un champ custom -->
+    <!--
+    <types>
+        <members>Account.Old_Field__c</members>
+        <n>CustomField</n>
+    </types>
+    -->
+    
+    <!-- Exemple : Supprimer un LWC -->
+    <!--
+    <types>
+        <members>oldComponent</members>
+        <n>LightningComponentBundle</n>
+    </types>
+    -->
+    
+    <version>59.0</version>
+</Package>
