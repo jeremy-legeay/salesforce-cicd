@@ -57,6 +57,11 @@ jobs:
         env:
           SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
         run: |
+          if [ -z "${SFDX_AUTH_URL}" ]; then
+            echo "❌ Error: SFDX_AUTH_URL_${{ steps.env.outputs.ENV_NAME }} secret is not configured"
+            echo "Please configure the secret in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }} > Secrets"
+            exit 1
+          fi
           echo "${SFDX_AUTH_URL}" > ./authfile
           sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
           rm ./authfile
@@ -153,6 +158,11 @@ jobs:
         env:
           SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
         run: |
+          if [ -z "${SFDX_AUTH_URL}" ]; then
+            echo "❌ Error: SFDX_AUTH_URL_${{ steps.env.outputs.ENV_NAME }} secret is not configured"
+            echo "Please configure the secret in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }} > Secrets"
+            exit 1
+          fi
           echo "${SFDX_AUTH_URL}" > ./authfile
           sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
           rm ./authfile
@@ -220,6 +230,11 @@ jobs:
         env:
           SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
         run: |
+          if [ -z "${SFDX_AUTH_URL}" ]; then
+            echo "❌ Error: SFDX_AUTH_URL_${{ steps.env.outputs.ENV_NAME }} secret is not configured"
+            echo "Please configure the secret in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }} > Secrets"
+            exit 1
+          fi
           echo "${SFDX_AUTH_URL}" > ./authfile
           sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
           rm ./authfile
