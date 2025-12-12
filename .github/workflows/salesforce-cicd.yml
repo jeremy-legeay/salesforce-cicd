@@ -20,6 +20,8 @@ jobs:
   validate:
     name: Validate & Test
     runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.env.outputs.ENV_NAME }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

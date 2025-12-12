@@ -65,10 +65,10 @@ Pour CHAQUE org Salesforce :
 
 ```bash
 # 1. Se connecter
-sf org login web --alias dev-sandbox --instance-url https://test.salesforce.com
+sf org login web --alias GIT-CICD-PROD --instance-url https://jleg-cicd-prod-dev-ed.develop.my.salesforce.com
 
 # 2. Obtenir l'Auth URL
-sf org display --target-org dev-sandbox --verbose
+sf org display --target-org GIT-CICD-INT --verbose
 ```
 
 Copiez la ligne qui commence par `force://PlatformCLI::...`
@@ -95,17 +95,21 @@ Dans **Settings > Branches**, créez ces règles :
 - ✅ Require 2 approvals
 - ✅ Require status checks to pass before merging
 - ✅ Require branches to be up to date
-- Status checks : `validate` et `deploy`
+- Status checks : `Validate & Test` et `Deploy to PRODUCTION`
 
 #### Branche `uat`
 - ✅ Require pull request
 - ✅ Require 2 approvals
-- ✅ Require status checks
+- ✅ Require status checks to pass before merging
+- ✅ Require branches to be up to date
+- Status checks : `Validate & Test` et `Deploy to UAT`
 
 #### Branche `integration`
 - ✅ Require pull request
 - ✅ Require 1 approval
-- ✅ Require status checks
+- ✅ Require status checks to pass before merging
+- ✅ Require branches to be up to date
+- Status checks : `Validate & Test` et `Deploy to INTEGRATION`
 
 #### Branche `develop`
 - ✅ Require pull request

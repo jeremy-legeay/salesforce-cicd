@@ -117,3 +117,5 @@ pmd-report/
 
 # Anonymous Apex
 scripts/apex/scratch.apex
+
+.history/*
