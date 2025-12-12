@@ -42,16 +42,30 @@ jobs:
       - name: Determine target environment
         id: env
         run: |
+          echo "🔍 Debug: github.ref = ${{ github.ref }}"
+          echo "🔍 Debug: github.ref_name = ${{ github.ref_name }}"
+          echo "🔍 Debug: github.event_name = ${{ github.event_name }}"
+
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: PRODUCTION"
           elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
             echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: UAT"
           elif [[ "${{ github.ref }}" == "refs/heads/integration" ]]; then
             echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: INTEGRATION"
+          else
+            echo "❌ Error: Branch ${{ github.ref }} is not configured for CI/CD"
+            echo "Only integration, uat, and main branches trigger deployments"
+            exit 1
           fi
+
+          echo "🔍 Debug: ENV_NAME set in GITHUB_OUTPUT"
+          echo "🔍 Debug: ORG_ALIAS set in GITHUB_OUTPUT"
 
       - name: Authenticate to Salesforce
         env:
@@ -156,16 +170,30 @@ jobs:
       - name: Determine target environment
         id: env
         run: |
+          echo "🔍 Debug: github.ref = ${{ github.ref }}"
+          echo "🔍 Debug: github.ref_name = ${{ github.ref_name }}"
+          echo "🔍 Debug: github.event_name = ${{ github.event_name }}"
+
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: PRODUCTION"
           elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
             echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: UAT"
           elif [[ "${{ github.ref }}" == "refs/heads/integration" ]]; then
             echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: INTEGRATION"
+          else
+            echo "❌ Error: Branch ${{ github.ref }} is not configured for CI/CD"
+            echo "Only integration, uat, and main branches trigger deployments"
+            exit 1
           fi
+
+          echo "🔍 Debug: ENV_NAME set in GITHUB_OUTPUT"
+          echo "🔍 Debug: ORG_ALIAS set in GITHUB_OUTPUT"
 
       - name: Authenticate to Salesforce
         env:
@@ -241,16 +269,30 @@ jobs:
       - name: Determine target environment
         id: env
         run: |
+          echo "🔍 Debug: github.ref = ${{ github.ref }}"
+          echo "🔍 Debug: github.ref_name = ${{ github.ref_name }}"
+          echo "🔍 Debug: github.event_name = ${{ github.event_name }}"
+
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: PRODUCTION"
           elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
             echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: UAT"
           elif [[ "${{ github.ref }}" == "refs/heads/integration" ]]; then
             echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+            echo "✅ Environment detected: INTEGRATION"
+          else
+            echo "❌ Error: Branch ${{ github.ref }} is not configured for CI/CD"
+            echo "Only integration, uat, and main branches trigger deployments"
+            exit 1
           fi
+
+          echo "🔍 Debug: ENV_NAME set in GITHUB_OUTPUT"
+          echo "🔍 Debug: ORG_ALIAS set in GITHUB_OUTPUT"
 
       - name: Authenticate to Salesforce
         env:
