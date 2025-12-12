@@ -1,5 +1,19 @@
 # 🚀 Guide d'Installation Rapide - CI/CD Salesforce
 
+## 💡 Comment fonctionne ce pipeline ?
+
+Ce pipeline utilise le mécanisme de **Quick Deploy** de Salesforce pour un déploiement rapide et sécurisé :
+
+1. **Validation complète** : À chaque Pull Request, tous les tests Apex sont exécutés (job `Validate & Test`)
+2. **Récupération du Job ID** : Si la validation réussit, Salesforce retourne un Job ID valide pendant 4 jours
+3. **Approbation manuelle** : Un reviewer approuve le déploiement via GitHub Environments
+4. **Quick Deploy instantané** : Le job `Deploy` déploie instantanément en utilisant le Job ID, **sans relancer les tests**
+
+**Avantages** :
+- ⚡ Déploiement ultra-rapide (quelques secondes vs plusieurs minutes)
+- 🛡️ Sécurité maximale (les tests sont obligatoires à l'étape de validation)
+- ✅ Contrôle humain via approbations GitHub
+
 ## ⚡ Installation en 10 minutes
 
 ### 1. Structure du projet
@@ -95,30 +109,34 @@ Dans **Settings > Branches**, créez ces règles :
 - ✅ Require 2 approvals
 - ✅ Require status checks to pass before merging
 - ✅ Require branches to be up to date
-- Status checks : `Validate & Test` et `Deploy to PRODUCTION`
+- Status checks : `Validate & Test` uniquement
+
+**Note** : Le job `Deploy` s'exécute **après** le merge et nécessite une approbation manuelle via GitHub Environments (2+ reviewers + timer).
 
 #### Branche `uat`
 - ✅ Require pull request
 - ✅ Require 2 approvals
 - ✅ Require status checks to pass before merging
 - ✅ Require branches to be up to date
-- Status checks : `Validate & Test` et `Deploy to UAT`
+- Status checks : `Validate & Test` uniquement
+
+**Note** : Le job `Deploy` s'exécute **après** le merge et nécessite une approbation manuelle via GitHub Environments (2 reviewers).
 
 #### Branche `integration`
 - ✅ Require pull request
 - ✅ Require 1 approval
 - ✅ Require status checks to pass before merging
 - ✅ Require branches to be up to date
-- Status checks : `Validate & Test` et `Deploy to INTEGRATION`
+- Status checks : `Validate & Test` uniquement
 
-#### Branche `develop`
-- ✅ Require pull request
-- ✅ Require 1 approval
+**Note** : Le job `Deploy` s'exécute **après** le merge et nécessite une approbation manuelle via GitHub Environments (1 reviewer).
+
+**Note** : Pas de CI/CD sur cette branche. Développement local uniquement.
 
 ### 5. Tester le pipeline
 
 ```bash
-# Créer une branche de test
+# Créer une branche de test depuis develop
 git checkout develop
 git checkout -b test/cicd-setup
 
@@ -132,37 +150,138 @@ git push origin test/cicd-setup
 ```
 
 Puis :
-1. Créez une PR vers `develop`
-2. Vérifiez que les tests automatiques s'exécutent dans l'onglet **Actions**
-3. Mergez la PR
-4. Vérifiez que le déploiement vers DEV fonctionne
+1. Créez une **Pull Request** de `test/cicd-setup` vers `integration` sur GitHub
+2. Vérifiez que le workflow **Validate & Test** s'exécute dans l'onglet **Actions**
+   - Ce job valide le déploiement avec tous les tests
+   - Il récupère un Job ID pour le Quick Deploy
+   - ✅ Une fois terminé, la PR peut être mergée
+3. Mergez la PR (après approbation du reviewer de la PR)
+4. **Le workflow se relance automatiquement** après le merge
+5. Le job **Deploy** attend maintenant l'approbation via **GitHub Environment**
+   - Allez dans **Actions** > votre workflow
+   - Cliquez sur **Review deployments**
+   - Approuvez le déploiement vers INTEGRATION
+6. Le **Quick Deploy** s'exécute instantanément (10-30 secondes)
+   - Utilise le Job ID de l'étape 2
+   - Aucun test relancé ⚡
+
+**Note** :
+- La branche `develop` ne déclenche PAS le CI/CD. Le pipeline commence uniquement sur `integration`, `uat` et `main`.
+- Le **Quick Deploy** permet de gagner du temps en évitant de relancer tous les tests au moment du déploiement.
 
 ### 6. Workflow quotidien
 
 ```bash
-# Développement sur DEV (via VS Code)
-# - Utiliser Salesforce Extension Pack
-# - Deploy/Retrieve directement depuis VS Code
-# - Commiter dans 'develop' branch
+# 1. DÉVELOPPEMENT LOCAL (DEV)
+# - Travaillez sur la branche 'develop'
+# - Utilisez VS Code + Salesforce Extension Pack
+# - Deploy/Retrieve directement depuis VS Code vers votre org DEV
+# - Committez vos changements localement
 
-# Promotion vers INTEGRATION (début du CI/CD)
+git checkout develop
+git add .
+git commit -m "feat: ma nouvelle fonctionnalité"
+
+# 2. PROMOTION VERS INTEGRATION (début du CI/CD)
+# Créez une Pull Request de 'develop' vers 'integration'
+git push origin develop
+# → Créez une PR sur GitHub : develop → integration
+# → Attendre approbation (1 reviewer)
+# → Merger la PR
+# → Le workflow CI/CD se déclenche automatiquement sur 'integration'
+
+# 3. PROMOTION VERS UAT
+# Créez une Pull Request de 'integration' vers 'uat'
 git checkout integration
-git merge develop
-git push
-# → Attendre approbation (1 reviewer) → Déploiement auto
+git pull
+git push origin integration
+# → Créez une PR sur GitHub : integration → uat
+# → Attendre approbations (2 reviewers)
+# → Merger la PR
+# → Le workflow CI/CD se déclenche automatiquement sur 'uat'
 
-# Promotion vers UAT
+# 4. PROMOTION VERS PRODUCTION
+# Créez une Pull Request de 'uat' vers 'main'
 git checkout uat
-git merge integration
-git push
-# → Attendre approbations (2 reviewers) → Déploiement auto
-
-# Promotion vers PRODUCTION
-git checkout main
-git merge uat
-git push
-# → Attendre approbations (2+ reviewers) + timer → Déploiement
+git pull
+git push origin uat
+# → Créez une PR sur GitHub : uat → main
+# → Attendre approbations (2+ reviewers) + wait timer
+# → Merger la PR
+# → Le workflow CI/CD se déclenche automatiquement sur 'main'
 ```
+
+**Important** :
+- La branche `develop` est pour le développement local uniquement (pas de CI/CD)
+- Le CI/CD commence à partir de `integration` via des Pull Requests
+- Chaque environnement (INTEGRATION, UAT, PRODUCTION) nécessite une approbation manuelle via GitHub Environments
+
+### 7. Schéma du workflow Quick Deploy
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Pull Request créée vers 'integration/uat/main'            │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │   Job: Validate & Test      │
+        │  - Checkout code            │
+        │  - Run Apex Tests           │
+        │  - Validate deployment      │
+        │  - Récupère Job ID ✅       │
+        └─────────────┬───────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │  APPROBATION #1             │
+        │  Approbation de la PR       │
+        │  (1-2 reviewers)            │
+        └─────────────┬───────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │   MERGE de la PR            │
+        │   Workflow se relance       │
+        └─────────────┬───────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │  APPROBATION #2             │
+        │  Approbation Environment    │
+        │  via GitHub Actions UI      │
+        │  (1-2 reviewers)            │
+        └─────────────┬───────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │   Job: Deploy               │
+        │  - Utilise Job ID           │
+        │  - Quick Deploy ⚡          │
+        │  - Aucun test relancé       │
+        │  - Déploiement instantané   │
+        └─────────────┬───────────────┘
+                      │
+                      ▼
+        ┌─────────────────────────────┐
+        │   Job: Verify               │
+        │  - Smoke tests              │
+        │  - Post-deployment checks   │
+        └─────────────────────────────┘
+```
+
+**Important : Double approbation** :
+- **Approbation #1** : Approbation de la Pull Request (protection de branche)
+  - Se fait dans l'interface de la PR
+  - Vérifie que le code est correct et que les tests passent
+- **Approbation #2** : Approbation du déploiement (GitHub Environment)
+  - Se fait dans l'onglet Actions après le merge
+  - Décision finale de déployer en production
+
+**Temps gagné avec Quick Deploy** :
+- Validation initiale : ~5-10 minutes (avec tous les tests)
+- Déploiement Quick Deploy : ~10-30 secondes ⚡
+- VS déploiement classique : ~5-10 minutes à chaque fois
 
 ## 🎯 Checklist de configuration
 

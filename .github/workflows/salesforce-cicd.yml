@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       env_name: ${{ steps.env.outputs.ENV_NAME }}
+      job_id: ${{ steps.validate.outputs.job_id }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -87,23 +88,30 @@ jobs:
       - name: Validate deployment (check-only)
         id: validate
         run: |
-          sf project deploy start \
+          RESULT=$(sf project deploy start \
             --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
             --manifest manifest/package.xml \
             --test-level RunLocalTests \
             --dry-run \
             --wait 30 \
-            --verbose
+            --verbose \
+            --json)
+
+          echo "$RESULT"
+          JOB_ID=$(echo "$RESULT" | jq -r '.result.id')
+          echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
+          echo "✅ Validation Job ID: $JOB_ID"
 
       - name: Validation Summary
         run: |
           echo "✅ Validation successful for ${{ steps.env.outputs.ENV_NAME }}"
           echo "Branch: ${{ github.ref_name }}"
           echo "Commit: ${{ github.sha }}"
+          echo "Job ID for Quick Deploy: ${{ steps.validate.outputs.job_id }}"
 
   # Job 2: Déploiement avec validation manuelle
   deploy:
-    name: Deploy to ${{ needs.validate.outputs.env_name }}
+    name: Deploy
     needs: validate
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
@@ -149,23 +157,25 @@ jobs:
           sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
           rm ./authfile
 
-      - name: Deploy to Salesforce
+      - name: Quick Deploy to Salesforce
         id: deploy
         run: |
-          sf project deploy start \
+          echo "🚀 Starting Quick Deploy using validation Job ID: ${{ needs.validate.outputs.job_id }}"
+
+          sf project deploy quick \
+            --job-id ${{ needs.validate.outputs.job_id }} \
             --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
-            --manifest manifest/package.xml \
-            --test-level RunLocalTests \
             --wait 30 \
             --verbose
 
       - name: Deployment Summary
         if: success()
         run: |
-          echo "🚀 Deployment successful to ${{ steps.env.outputs.ENV_NAME }}"
+          echo "🚀 Quick Deploy successful to ${{ steps.env.outputs.ENV_NAME }}"
           echo "Branch: ${{ github.ref_name }}"
           echo "Commit: ${{ github.sha }}"
           echo "Deployed by: ${{ github.actor }}"
+          echo "Validation Job ID: ${{ needs.validate.outputs.job_id }}"
 
       - name: Notify on failure
         if: failure()

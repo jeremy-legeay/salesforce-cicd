@@ -1,6 +1,6 @@
 # 🚀 CI/CD Salesforce avec GitHub Actions
 
-Pipeline complet de CI/CD pour déployer automatiquement sur Salesforce avec 4 environnements et validation manuelle.
+Pipeline complet de CI/CD pour déployer automatiquement sur Salesforce avec 4 environnements, validation manuelle et **Quick Deploy** pour des déploiements ultra-rapides.
 
 ## 📋 Table des matières
 
@@ -24,42 +24,52 @@ Pipeline complet de CI/CD pour déployer automatiquement sur Salesforce avec 4 e
 | **UAT** | `uat` | UAT Sandbox | ✅ Oui | 2 | Tests utilisateurs |
 | **PRODUCTION** | `main` | Production | ✅ Oui + Timer | 2+ | Production |
 
-### Pipeline CI/CD
+### Pipeline CI/CD avec Quick Deploy
 
 ```
-┌─────────────────┐
-│  Push/PR        │
-│  (integration+) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Validate       │
-│  - Apex Tests   │
-│  - Check Only   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Manual         │
-│  Approval       │
-│  (required)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Deploy         │
-│  - Full Deploy  │
-│  - Run Tests    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Verify         │
-│  - Smoke Tests  │
-└─────────────────┘
+┌─────────────────────────┐
+│  Pull Request créée     │
+│  (integration/uat/main) │
+└──────────┬──────────────┘
+           │
+           ▼
+┌─────────────────────────┐
+│  Job: Validate & Test   │
+│  - Run Apex Tests       │
+│  - Validate Deployment  │
+│  - Récupère Job ID ✅   │
+└──────────┬──────────────┘
+           │
+           ▼
+┌─────────────────────────┐
+│  Approbation manuelle   │
+│  via GitHub Environment │
+│  (1-2 reviewers)        │
+└──────────┬──────────────┘
+           │
+           ▼ (après merge)
+┌─────────────────────────┐
+│  Job: Deploy            │
+│  - Quick Deploy ⚡       │
+│  - Utilise Job ID       │
+│  - AUCUN test relancé   │
+└──────────┬──────────────┘
+           │
+           ▼
+┌─────────────────────────┐
+│  Job: Verify            │
+│  - Smoke Tests          │
+│  - Post-deployment      │
+└─────────────────────────┘
+```
 
-Note: Le pipeline CI/CD démarre à partir de 'integration'.
+**Avantages du Quick Deploy** :
+- ⚡ Déploiement instantané (10-30 secondes vs 5-10 minutes)
+- 🛡️ Sécurité : tests obligatoires lors de la validation
+- ✅ Aucun test relancé lors du déploiement (gain de temps)
+- 📝 Job ID valide pendant 4 jours
+
+**Note** : Le pipeline CI/CD démarre à partir de 'integration'.
 DEV = développement direct via VS Code (sans CI/CD).
 ```
 
