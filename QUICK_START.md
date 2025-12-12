@@ -100,7 +100,35 @@ Pour chaque environnement **du pipeline CI/CD** dans GitHub :
 
 **Important** : Vous n'avez besoin que de **3 secrets** (INTEGRATION, UAT, PRODUCTION). L'environnement DEV est géré directement via VS Code.
 
-### 4. Protéger les branches
+### 4. Créer et configurer les branches
+
+#### A. Créer la structure de branches
+
+**Important** : Les branches doivent être créées dans un **flux linéaire** pour permettre une promotion progressive du code.
+
+```bash
+# 1. Vous êtes déjà sur main
+git checkout main
+
+# 2. Créer integration à partir de main
+git checkout -b integration
+git push -u origin integration
+
+# 3. Créer uat à partir de integration
+git checkout -b uat
+git push -u origin uat
+
+# 4. Retour sur main
+git checkout main
+```
+
+**Structure finale** :
+```
+integration → uat → main
+    (INT)     (UAT)  (PROD)
+```
+
+#### B. Protéger les branches
 
 Dans **Settings > Branches**, créez ces règles :
 
@@ -131,71 +159,81 @@ Dans **Settings > Branches**, créez ces règles :
 
 **Note** : Le job `Deploy` s'exécute **après** le merge et nécessite une approbation manuelle via GitHub Environments (1 reviewer).
 
-**Note** : Pas de CI/CD sur cette branche. Développement local uniquement.
 
 ### 5. Tester le pipeline
 
+**Important** : Le premier environnement du CI/CD est `integration`. Vous allez donc faire un push direct sur `integration` pour tester.
+
 ```bash
-# Créer une branche de test depuis develop
-git checkout develop
-git checkout -b test/cicd-setup
+# 1. Faire un changement minimal sur integration
+git checkout integration
+git pull origin integration
 
-# Faire un changement minimal
-echo "# Test CI/CD" >> README.md
+# Modifier un fichier (exemple : README)
+echo "# Test CI/CD Pipeline" >> README.md
 
-# Commit et push
+# Commit et push directement sur integration
 git add README.md
 git commit -m "test: verify CI/CD pipeline"
-git push origin test/cicd-setup
+git push origin integration
 ```
 
-Puis :
-1. Créez une **Pull Request** de `test/cicd-setup` vers `integration` sur GitHub
-2. Vérifiez que le workflow **Validate & Test** s'exécute dans l'onglet **Actions**
-   - Ce job valide le déploiement avec tous les tests
-   - Il récupère un Job ID pour le Quick Deploy
-   - ✅ Une fois terminé, la PR peut être mergée
-3. Mergez la PR (après approbation du reviewer de la PR)
-4. **Le workflow se relance automatiquement** après le merge
-5. Le job **Deploy** attend maintenant l'approbation via **GitHub Environment**
-   - Allez dans **Actions** > votre workflow
+**Le workflow se déclenche automatiquement** :
+
+1. Le workflow **Validate & Test** s'exécute dans l'onglet **Actions**
+   - Valide le déploiement avec tous les tests
+   - Récupère un Job ID pour le Quick Deploy
+   - ✅ Une fois terminé, le job `Deploy` attend
+
+2. Le job **Deploy** attend l'approbation via **GitHub Environment**
+   - Allez dans **Actions** > votre workflow en cours
    - Cliquez sur **Review deployments**
-   - Approuvez le déploiement vers INTEGRATION
-6. Le **Quick Deploy** s'exécute instantanément (10-30 secondes)
-   - Utilise le Job ID de l'étape 2
+   - Sélectionnez l'environnement INTEGRATION
+   - Cliquez sur **Approve and deploy**
+
+3. Le **Quick Deploy** s'exécute instantanément (10-30 secondes)
+   - Utilise le Job ID de l'étape 1
    - Aucun test relancé ⚡
+   - Déploiement vers l'org INTEGRATION
+
+4. Vérifiez dans les logs que tout s'est bien passé
 
 **Note** :
-- La branche `develop` ne déclenche PAS le CI/CD. Le pipeline commence uniquement sur `integration`, `uat` et `main`.
-- Le **Quick Deploy** permet de gagner du temps en évitant de relancer tous les tests au moment du déploiement.
+- Le CI/CD fonctionne sur les branches `integration`, `uat` et `main`
+- Pour les prochains déploiements, utilisez des feature branches et Pull Requests (voir section 6)
 
 ### 6. Workflow quotidien
 
 ```bash
 # 1. DÉVELOPPEMENT LOCAL (DEV)
-# - Travaillez sur la branche 'develop'
+# - Créez une feature branch depuis 'integration'
 # - Utilisez VS Code + Salesforce Extension Pack
 # - Deploy/Retrieve directement depuis VS Code vers votre org DEV
 # - Committez vos changements localement
 
-git checkout develop
+git checkout integration
+git pull origin integration
+git checkout -b feature/my-new-feature
+
+# Développement...
 git add .
 git commit -m "feat: ma nouvelle fonctionnalité"
+git push -u origin feature/my-new-feature
 
 # 2. PROMOTION VERS INTEGRATION (début du CI/CD)
-# Créez une Pull Request de 'develop' vers 'integration'
-git push origin develop
-# → Créez une PR sur GitHub : develop → integration
+# Créez une Pull Request de 'feature/my-new-feature' vers 'integration'
+# → Créez une PR sur GitHub : feature/my-new-feature → integration
 # → Attendre approbation (1 reviewer)
 # → Merger la PR
 # → Le workflow CI/CD se déclenche automatiquement sur 'integration'
 
-# 3. PROMOTION VERS UAT
-# Créez une Pull Request de 'integration' vers 'uat'
+# 3. PROMOTION VERS UAT (via release branch)
+# Créez une release branch depuis 'integration'
 git checkout integration
-git pull
-git push origin integration
-# → Créez une PR sur GitHub : integration → uat
+git pull origin integration
+git checkout -b release/v1.2.0
+git push -u origin release/v1.2.0
+# → Créez une PR sur GitHub : release/v1.2.0 → uat
 # → Attendre approbations (2 reviewers)
 # → Merger la PR
 # → Le workflow CI/CD se déclenche automatiquement sur 'uat'
@@ -203,8 +241,7 @@ git push origin integration
 # 4. PROMOTION VERS PRODUCTION
 # Créez une Pull Request de 'uat' vers 'main'
 git checkout uat
-git pull
-git push origin uat
+git pull origin uat
 # → Créez une PR sur GitHub : uat → main
 # → Attendre approbations (2+ reviewers) + wait timer
 # → Merger la PR
@@ -212,11 +249,281 @@ git push origin uat
 ```
 
 **Important** :
-- La branche `develop` est pour le développement local uniquement (pas de CI/CD)
-- Le CI/CD commence à partir de `integration` via des Pull Requests
+- Développez sur des feature branches créées depuis `integration`
+- Utilisez des release branches pour packager plusieurs features vers UAT
 - Chaque environnement (INTEGRATION, UAT, PRODUCTION) nécessite une approbation manuelle via GitHub Environments
 
-### 7. Schéma du workflow Quick Deploy
+### 7. Gestion avancée des branches
+
+#### Schéma de la stratégie de branching (avec Release Branches)
+
+```
+                                     ┌─ release/v1.2.0 ─┐
+                                     │    (PACKAGE)     │
+                                     │                  ↓
+    feature/xxx ──→ integration ─────┴──────────────→ uat ─────→ main
+                        (INT)                         (UAT)      (PROD)
+                                                                    ↓
+                                                                    │
+                       ↑                                            │
+                       └──────────────── hotfix/xxx ────────────────┘
+```
+
+**Flux normal** :
+1. **feature/xxx** → **integration** (PR depuis feature branch)
+   - Développement sur feature branch (org DEV local via VS Code)
+   - PR vers integration avec 1 approbation
+   - Tests et validations sur INTEGRATION
+
+2. **integration** → **release/v1.2.0** (créer une release branch)
+   - Package plusieurs features testées sur INTEGRATION
+   - 1 release = package cohérent de fonctionnalités
+
+3. **release/v1.2.0** → **uat** (PR avec le package)
+   - 1 seule PR pour tout le package
+   - Déploiement vers UAT pour tests utilisateurs
+
+4. **uat** → **main** (PR vers production)
+   - Déploiement final en PRODUCTION
+
+**Avantages** :
+- ✅ Feature branches pour isolation du développement
+- ✅ INTEGRATION = environnement de test pour chaque feature
+- ✅ UAT = package cohérent testé (via release branches)
+- ✅ Pas de dizaines de PR vers UAT
+- ✅ Versioning clair (v1.2.0, v1.3.0, etc.)
+
+**Hotfix** : `main → hotfix → main` puis merge dans `uat` et `integration`
+
+#### A. Workflow Feature Branch → INTEGRATION
+
+Pour développer et déployer sur INTEGRATION :
+
+```bash
+# 1. Créer une feature branch depuis integration
+git checkout integration
+git pull origin integration
+git checkout -b feature/user-authentication
+
+# 2. Développer localement (org DEV via VS Code)
+# ... développement avec VS Code + Salesforce Extension Pack ...
+# ... deploy/retrieve directement vers org DEV ...
+git add .
+git commit -m "feat: ajout système d'authentification"
+
+# 3. Pousser la feature branch
+git push -u origin feature/user-authentication
+
+# 4. Créer une PR vers integration sur GitHub
+# → PR titre : "feat: user authentication system"
+# → Attendre approbation (1 reviewer)
+# → Le CI/CD valide automatiquement (job Validate & Test)
+# → Merger la PR
+
+# 5. Le CI/CD se déclenche sur integration
+# → Workflow Validate & Test (récupère Job ID)
+# → Approbation Environment INTEGRATION
+# → Quick Deploy vers org INTEGRATION
+
+# 6. Tester sur l'org INTEGRATION
+# Si OK → supprimer la feature branch et préparer pour UAT
+# Si KO → corriger sur la feature branch et recommencer
+
+# Supprimer la feature branch après merge
+git branch -d feature/user-authentication
+git push origin --delete feature/user-authentication
+```
+
+**Note** : Les feature branches permettent d'isoler le développement et de valider via PR avant déploiement sur INTEGRATION.
+
+#### B. Workflow Release Branch → UAT (Package)
+
+**Quand utiliser** : Lorsque vous avez plusieurs déploiements testés sur INTEGRATION et vous voulez créer un package cohérent pour UAT.
+
+```bash
+# 1. Créer une release branch depuis integration
+git checkout integration
+git pull origin integration
+git checkout -b release/v1.2.0
+
+# 2. (Optionnel) Ajustements finaux
+# - Mise à jour numéro de version dans le code
+# - Release notes
+git add .
+git commit -m "chore: prepare release v1.2.0"
+
+# 3. Pousser la release branch
+git push -u origin release/v1.2.0
+
+# 4. Créer une PR vers uat sur GitHub
+# → PR titre : "Release v1.2.0"
+# → Description : Liste de tous les déploiements INTEGRATION inclus
+# → Attendre approbation (2 reviewers)
+# → Merger la PR
+
+# 5. Le CI/CD se déclenche automatiquement sur uat
+# → Validation + Approbation Environment → Quick Deploy vers UAT
+
+# 6. Tag la release après déploiement réussi
+git checkout uat
+git pull origin uat
+git tag -a v1.2.0 -m "Release v1.2.0"
+git push origin v1.2.0
+
+# 7. Supprimer la release branch
+git branch -D release/v1.2.0
+git push origin --delete release/v1.2.0
+```
+
+**Exemple de description de PR pour une release vers UAT** :
+
+```markdown
+# Release v1.2.0 → UAT
+
+## Déploiements INTEGRATION inclus dans ce package
+
+### Features
+- ✅ User authentication system (déployé INT le 15/12)
+- ✅ Dashboard analytics (déployé INT le 16/12)
+- ✅ Email notifications (déployé INT le 18/12)
+
+### Bug fixes
+- 🐛 Fixed login validation error (déployé INT le 17/12)
+- 🐛 Corrected date format display (déployé INT le 19/12)
+
+## Tests
+- ✅ Tous les déploiements testés individuellement sur INTEGRATION
+- ✅ Package complet validé sur INTEGRATION
+- ✅ Tous les tests Apex passent
+
+## Calendrier
+- Déploiement UAT : 20/12 (après approbations)
+- Tests utilisateurs UAT : 20-22/12
+- Déploiement PROD prévu : 23/12
+```
+
+**Cycle de release recommandé** :
+- **Sprint 2 semaines** → 1 release UAT par sprint (package de ~10-20 déploiements INT)
+- **Sprint 1 semaine** → 1 release UAT par semaine
+- **Hotfix** → Release immédiate si critique
+
+#### C. Gestion des Hotfix (correction urgente en production)
+
+Si vous devez corriger un bug critique en production :
+
+```bash
+# 1. Créer hotfix depuis main
+git checkout main
+git pull origin main
+git checkout -b hotfix/critical-bug-fix
+
+# 2. Corriger le bug et tester
+git add .
+git commit -m "hotfix: correction bug critique"
+git push -u origin hotfix/critical-bug-fix
+
+# 3. Créer une PR vers main et merger
+# → Déploiement immédiat en PROD
+
+# 4. IMPORTANT : Reporter le fix dans toutes les branches
+# Pour éviter que le bug revienne lors des prochains déploiements
+
+# Merger dans uat
+git checkout uat
+git pull origin uat
+git merge hotfix/critical-bug-fix
+git push origin uat
+
+# Merger dans integration
+git checkout integration
+git pull origin integration
+git merge hotfix/critical-bug-fix
+git push origin integration
+
+# 5. Supprimer la branche hotfix
+git branch -D hotfix/critical-bug-fix
+git push origin --delete hotfix/critical-bug-fix
+```
+
+#### D. Synchronisation des branches (si désynchronisées)
+
+Si une branche est en retard par rapport à la précédente :
+
+```bash
+# Exemple : uat est en retard par rapport à integration
+
+# 1. Aller sur uat
+git checkout uat
+git pull origin uat
+
+# 2. Merger integration dans uat
+git merge integration
+
+# 3. Résoudre les conflits si nécessaire
+# Puis commiter et pousser
+git push origin uat
+
+# 4. Répéter pour main si nécessaire
+git checkout main
+git pull origin main
+git merge uat
+git push origin main
+```
+
+#### E. Nettoyage des branches obsolètes
+
+```bash
+# Lister toutes les branches
+git branch -a
+
+# Supprimer une branche locale
+git branch -d nom-branche
+
+# Supprimer une branche sur GitHub
+git push origin --delete nom-branche
+
+# Nettoyer les références aux branches remote supprimées
+git fetch --prune
+```
+
+#### F. Stratégie de nommage des branches
+
+**Conventions recommandées** :
+
+```
+feature/description-courte    → Nouvelle fonctionnalité
+fix/description-bug           → Correction de bug
+release/vX.Y.Z               → Package de features pour promotion
+hotfix/description-urgente    → Correction urgente en production
+refactor/description          → Refactoring sans changement fonctionnel
+docs/description              → Documentation uniquement
+test/description              → Ajout/modification de tests
+chore/description             → Tâches techniques (dependencies, config, etc.)
+```
+
+**Exemples** :
+```
+feature/user-authentication
+fix/login-validation-error
+release/v1.2.0               ← Package de plusieurs features
+release/v1.3.0-sprint24      ← Release avec numéro de sprint
+hotfix/security-patch-xss
+refactor/api-endpoints
+docs/deployment-guide
+test/apex-test-coverage
+chore/update-dependencies
+```
+
+**Versioning sémantique pour les releases** :
+```
+v1.2.3
+│ │ │
+│ │ └─→ PATCH : Bug fixes uniquement
+│ └───→ MINOR : Nouvelles features (non breaking)
+└─────→ MAJOR : Breaking changes
+```
+
+### 8. Schéma du workflow Quick Deploy
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -285,14 +592,26 @@ git push origin uat
 
 ## 🎯 Checklist de configuration
 
+### Configuration initiale
 - [ ] Tous les fichiers copiés dans le bon répertoire
+- [ ] Structure de branches créée (`integration`, `uat` depuis `main`)
 - [ ] 3 environnements créés dans GitHub (INTEGRATION, UAT, PRODUCTION)
 - [ ] 3 secrets SFDX_AUTH_URL configurés (pas besoin pour DEV)
-- [ ] Branches protégées configurées
+- [ ] Branches protégées configurées avec les règles appropriées
 - [ ] Test du pipeline réussi sur `integration`
-- [ ] VS Code configuré pour développement sur DEV
+
+### Configuration développeur
+- [ ] VS Code installé avec Salesforce Extension Pack
+- [ ] Salesforce CLI installé et configuré
+- [ ] Connexion à l'org DEV configurée dans VS Code
+- [ ] Git configuré localement
 - [ ] Documentation lue (README.md et BEST_PRACTICES.md)
-- [ ] Équipe formée sur le workflow
+
+### Formation équipe
+- [ ] Équipe formée sur le workflow Git (feature branches, PR, merge)
+- [ ] Équipe formée sur les approbations GitHub Environments
+- [ ] Conventions de nommage des branches partagées
+- [ ] Procédure de hotfix documentée et comprise
 
 ## ⚠️ Problèmes fréquents
 
@@ -304,11 +623,30 @@ git push origin uat
 → Vérifiez les dépendances de données de test
 
 ### Déploiement timeout
-→ Augmentez le `--wait` dans le workflow (ligne 75)
+→ Augmentez le `--wait` dans le workflow (ligne 93 et 158)
 → Vérifiez les processus asynchrones dans l'org
+
+### Quick Deploy échoue avec "Job ID not found"
+→ Le Job ID est valide pendant 4 jours seulement
+→ Le Job ID doit correspondre à l'org cible
+→ Relancez une validation complète pour obtenir un nouveau Job ID
 
 ### Branche non protégée
 → Assurez-vous d'avoir créé les règles dans Settings > Branches
+
+### Conflits de merge entre branches
+→ Synchronisez régulièrement les branches (voir section 7.C)
+→ Utilisez `git merge` et non `git rebase` pour maintenir l'historique
+→ En cas de conflit, résolvez manuellement puis testez avant de pousser
+
+### Hotfix pas présent dans les branches
+→ Assurez-vous de merger le hotfix dans TOUTES les branches
+→ Ordre : `main` → `uat` → `integration`
+→ Vérifiez avec `git log` que le commit est présent partout
+
+### Branches désynchronisées
+→ Utilisez `git log --oneline --graph --all` pour visualiser
+→ Suivez la procédure de synchronisation (section 7.C)
 
 ## 📚 Prochaines étapes
 
@@ -328,4 +666,44 @@ En cas de problème :
 
 ---
 
+## 📊 Résumé visuel du workflow complet
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DÉVELOPPEMENT                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Developer → feature/xxx (VS Code direct deploy to DEV org)     │
+│                                                                  │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ PR to integration
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CI/CD PIPELINE                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. INTEGRATION (1 approbation PR + 1 approbation Env)          │
+│     → Validate & Test (récupère Job ID)                         │
+│     → Deploy (Quick Deploy ⚡)                                   │
+│                                                                  │
+│  2. UAT (2 approbations PR + 2 approbations Env)                │
+│     → Validate & Test (récupère Job ID)                         │
+│     → Deploy (Quick Deploy ⚡)                                   │
+│                                                                  │
+│  3. PRODUCTION (2+ approbations PR + 2+ approbations Env)       │
+│     → Validate & Test (récupère Job ID)                         │
+│     → Deploy (Quick Deploy ⚡)                                   │
+│     → Wait Timer                                                 │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+Temps total de bout en bout : ~20-30 minutes
+  (incluant validations + approbations)
+Temps de déploiement réel : ~30 secondes par environnement ⚡
+```
+
+---
+
 **Vous êtes prêt ! 🎉**
+
+Pour toute question ou problème, consultez les logs GitHub Actions ou contactez l'équipe DevOps.
