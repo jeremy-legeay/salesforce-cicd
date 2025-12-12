@@ -13,7 +13,7 @@ on:
       - main
 
 env:
-  SFDX_CLI_VERSION: 2.0.0
+  SFDX_CLI_VERSION: latest
 
 jobs:
   # Job 1: Validation et tests
