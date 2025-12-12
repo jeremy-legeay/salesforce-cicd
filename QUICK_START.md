@@ -59,9 +59,9 @@ git commit -m "chore: setup CI/CD pipeline"
 git push origin main
 ```
 
-### 3. Configurer GitHub Environments
+### 3. Configurer l'authentification JWT
 
-#### A. Créer les 3 environnements pour le CI/CD
+#### A. Créer les 3 environnements GitHub pour le CI/CD
 
 Allez dans **Settings > Environments** de votre repo et créez :
 
@@ -73,32 +73,105 @@ Allez dans **Settings > Environments** de votre repo et créez :
 
 **Note** : L'environnement DEV n'a pas besoin de configuration GitHub car le développement se fait directement via VS Code (pas de CI/CD).
 
-#### B. Générer les Auth URLs
+#### B. Générer le certificat SSL (une seule fois)
 
-Pour CHAQUE org Salesforce :
+Sur votre machine locale, générez une paire clé/certificat :
 
 ```bash
-# 1. Se connecter
-sf org login web --alias GIT-CICD-PROD --instance-url https://jleg-cicd-prod-dev-ed.develop.my.salesforce.com
-
-# 2. Obtenir l'Auth URL
-sf org display --target-org GIT-CICD-INT --verbose
+# Générer la clé privée et le certificat (valide 100 ans)
+openssl req -x509 -sha256 -nodes -days 36500 -newkey rsa:2048 -keyout server.key -out server.crt
 ```
 
-Copiez la ligne qui commence par `force://PlatformCLI::...`
+Répondez aux questions (ou appuyez sur Enter pour accepter les valeurs par défaut) :
+- **Country Name** : FR
+- **State** : (votre région ou Enter)
+- **Locality** : (votre ville ou Enter)
+- **Organization Name** : (votre entreprise ou Enter)
+- **Common Name** : github-cicd
 
-#### C. Ajouter les secrets
+Cela crée **2 fichiers** :
+- `server.key` : clé privée (**à garder SECRET** et ne JAMAIS committer dans Git)
+- `server.crt` : certificat public (à uploader dans Salesforce)
 
-Pour chaque environnement **du pipeline CI/CD** dans GitHub :
+**IMPORTANT** : Ajoutez `server.key` au `.gitignore` pour éviter de le committer par erreur !
 
-1. **Settings > Secrets and variables > Actions**
-2. Sélectionnez l'environnement (ex: INTEGRATION)
-3. **New environment secret**
-4. Nom : `SFDX_AUTH_URL_INTEGRATION`
-5. Valeur : Collez l'Auth URL
-6. Répétez pour UAT et PRODUCTION
+#### C. Créer une Connected App dans chaque org Salesforce
 
-**Important** : Vous n'avez besoin que de **3 secrets** (INTEGRATION, UAT, PRODUCTION). L'environnement DEV est géré directement via VS Code.
+Pour **CHAQUE org** (INTEGRATION, UAT, PRODUCTION), répétez ces étapes :
+
+1. Connectez-vous à l'org Salesforce
+2. Allez dans **Setup** (⚙️ en haut à droite)
+3. Quick Find → tapez **App Manager**
+4. Cliquez sur **New Connected App** (en haut à droite)
+
+**Configuration** :
+
+**Basic Information**
+- Connected App Name : `GitHub CI/CD JWT`
+- API Name : `GitHub_CICD_JWT` (auto-généré)
+- Contact Email : votre email
+
+**API (Enable OAuth Settings)**
+- ✅ **Enable OAuth Settings**
+- Callback URL : `http://localhost:1717/OauthRedirect`
+- ✅ **Use digital signatures** → Cliquez sur **Choose File** et uploadez `server.crt`
+
+**Selected OAuth Scopes** (déplacez ces 3 scopes de "Available" vers "Selected") :
+- **Access and manage your data (api)**
+- **Perform requests on your behalf at any time (refresh_token, offline_access)**
+- **Provide access to your data via the Web (web)**
+
+**Autres options** :
+- ✅ **Require Secret for Web Server Flow** (en bas)
+
+Cliquez sur **Save** et **attendez 2-10 minutes** (Salesforce a besoin de temps pour activer l'app).
+
+#### D. Récupérer le Consumer Key
+
+Pour **chaque Connected App** créée :
+
+1. **Setup → App Manager**
+2. Trouvez **GitHub CI/CD JWT**
+3. Cliquez sur **▼** à droite → **View**
+4. Cliquez sur **Manage Consumer Details**
+5. Vérifiez votre identité (code envoyé par email)
+6. **Copiez le Consumer Key** (c'est le Client ID)
+
+#### E. Configurer les secrets GitHub
+
+Pour **chaque environnement** GitHub (INTEGRATION, UAT, PRODUCTION), configurez **3 secrets** :
+
+**Exemple pour INTEGRATION** :
+
+1. Allez dans **Settings → Environments → INTEGRATION**
+2. Cliquez sur **Add Secret** et créez ces 3 secrets :
+
+**Secret 1** : `SF_CONSUMER_KEY_INTEGRATION`
+- Valeur : Le **Consumer Key** copié depuis la Connected App INTEGRATION
+
+**Secret 2** : `SF_USERNAME_INTEGRATION`
+- Valeur : Le **username Salesforce** de l'org INTEGRATION (ex: `admin@company-int.com`)
+
+**Secret 3** : `SF_PRIVATE_KEY_INTEGRATION`
+- Valeur : Le contenu **COMPLET** du fichier `server.key`
+  ```bash
+  # Pour afficher le contenu du fichier :
+  cat server.key
+  # Ou sur Windows :
+  type server.key
+  ```
+  Copiez **TOUT** le contenu, incluant les lignes `-----BEGIN PRIVATE KEY-----` et `-----END PRIVATE KEY-----`
+
+**Répétez pour UAT et PRODUCTION** avec les suffixes correspondants :
+- **UAT** : `SF_CONSUMER_KEY_UAT`, `SF_USERNAME_UAT`, `SF_PRIVATE_KEY_UAT`
+- **PRODUCTION** : `SF_CONSUMER_KEY_PRODUCTION`, `SF_USERNAME_PRODUCTION`, `SF_PRIVATE_KEY_PRODUCTION`
+
+**Récapitulatif** :
+- ✅ Utilisez le **même certificat** (server.key/server.crt) pour les 3 orgs
+- ✅ Créez une **Connected App différente** dans chaque org avec ce même certificat
+- ✅ Ne commitez **JAMAIS** `server.key` dans Git (ajoutez-le au `.gitignore`)
+- ✅ L'environnement **DEV** est géré directement via VS Code (pas de secret nécessaire)
+- ✅ Total de **9 secrets** à configurer (3 secrets × 3 environnements)
 
 ### 4. Créer et configurer les branches
 
@@ -594,9 +667,11 @@ v1.2.3
 
 ### Configuration initiale
 - [ ] Tous les fichiers copiés dans le bon répertoire
-- [ ] Structure de branches créée (`integration`, `uat` depuis `main`)
+- [ ] Certificat SSL généré (`server.key` et `server.crt`)
+- [ ] Connected App créée dans les 3 orgs (INTEGRATION, UAT, PRODUCTION)
 - [ ] 3 environnements créés dans GitHub (INTEGRATION, UAT, PRODUCTION)
-- [ ] 3 secrets SFDX_AUTH_URL configurés (pas besoin pour DEV)
+- [ ] 9 secrets JWT configurés (3 par environnement : `SF_CONSUMER_KEY`, `SF_USERNAME`, `SF_PRIVATE_KEY`)
+- [ ] Structure de branches créée (`integration`, `uat` depuis `main`)
 - [ ] Branches protégées configurées avec les règles appropriées
 - [ ] Test du pipeline réussi sur `integration`
 
@@ -615,8 +690,14 @@ v1.2.3
 
 ## ⚠️ Problèmes fréquents
 
-### Erreur : "Invalid client credentials"
-→ Régénérez l'Auth URL et mettez à jour le secret GitHub
+### Erreur : "invalid_client_id" ou "invalid_grant"
+→ Vérifiez le Consumer Key et que la Connected App est activée (attendre 2-10 min)
+→ Vérifiez que le certificat `server.crt` uploadé correspond au `server.key` dans les secrets
+→ Consultez le [JWT_SETUP_GUIDE.md](./JWT_SETUP_GUIDE.md) pour le dépannage détaillé
+
+### Erreur : "JWT secrets not configured"
+→ Vérifiez que les 3 secrets existent pour l'environnement (`SF_CONSUMER_KEY_*`, `SF_USERNAME_*`, `SF_PRIVATE_KEY_*`)
+→ Vérifiez les noms des secrets (sensible à la casse)
 
 ### Tests échouent dans le pipeline
 → Vérifiez que tous les tests passent localement d'abord

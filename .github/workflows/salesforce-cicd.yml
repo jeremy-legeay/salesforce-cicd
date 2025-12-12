@@ -55,16 +55,29 @@ jobs:
 
       - name: Authenticate to Salesforce
         env:
-          SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', steps.env.outputs.ENV_NAME)] }}
         run: |
-          if [ -z "${SFDX_AUTH_URL}" ]; then
-            echo "❌ Error: SFDX_AUTH_URL_${{ steps.env.outputs.ENV_NAME }} secret is not configured"
-            echo "Please configure the secret in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }} > Secrets"
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for ${{ steps.env.outputs.ENV_NAME }}"
+            echo "Please configure these secrets in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }}:"
+            echo "  - SF_CONSUMER_KEY_${{ steps.env.outputs.ENV_NAME }}"
+            echo "  - SF_USERNAME_${{ steps.env.outputs.ENV_NAME }}"
+            echo "  - SF_PRIVATE_KEY_${{ steps.env.outputs.ENV_NAME }}"
             exit 1
           fi
-          echo "${SFDX_AUTH_URL}" > ./authfile
-          sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
-          rm ./authfile
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
 
       - name: Run Apex Tests
         id: apex-tests
@@ -156,16 +169,29 @@ jobs:
 
       - name: Authenticate to Salesforce
         env:
-          SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', steps.env.outputs.ENV_NAME)] }}
         run: |
-          if [ -z "${SFDX_AUTH_URL}" ]; then
-            echo "❌ Error: SFDX_AUTH_URL_${{ steps.env.outputs.ENV_NAME }} secret is not configured"
-            echo "Please configure the secret in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }} > Secrets"
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for ${{ steps.env.outputs.ENV_NAME }}"
+            echo "Please configure these secrets in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }}:"
+            echo "  - SF_CONSUMER_KEY_${{ steps.env.outputs.ENV_NAME }}"
+            echo "  - SF_USERNAME_${{ steps.env.outputs.ENV_NAME }}"
+            echo "  - SF_PRIVATE_KEY_${{ steps.env.outputs.ENV_NAME }}"
             exit 1
           fi
-          echo "${SFDX_AUTH_URL}" > ./authfile
-          sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
-          rm ./authfile
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
 
       - name: Quick Deploy to Salesforce
         id: deploy
@@ -228,16 +254,29 @@ jobs:
 
       - name: Authenticate to Salesforce
         env:
-          SFDX_AUTH_URL: ${{ secrets[format('SFDX_AUTH_URL_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', steps.env.outputs.ENV_NAME)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', steps.env.outputs.ENV_NAME)] }}
         run: |
-          if [ -z "${SFDX_AUTH_URL}" ]; then
-            echo "❌ Error: SFDX_AUTH_URL_${{ steps.env.outputs.ENV_NAME }} secret is not configured"
-            echo "Please configure the secret in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }} > Secrets"
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for ${{ steps.env.outputs.ENV_NAME }}"
+            echo "Please configure these secrets in GitHub Settings > Environments > ${{ steps.env.outputs.ENV_NAME }}:"
+            echo "  - SF_CONSUMER_KEY_${{ steps.env.outputs.ENV_NAME }}"
+            echo "  - SF_USERNAME_${{ steps.env.outputs.ENV_NAME }}"
+            echo "  - SF_PRIVATE_KEY_${{ steps.env.outputs.ENV_NAME }}"
             exit 1
           fi
-          echo "${SFDX_AUTH_URL}" > ./authfile
-          sf org login sfdx-url --sfdx-url-file ./authfile --alias ${{ steps.env.outputs.ORG_ALIAS }}
-          rm ./authfile
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
 
       - name: Run smoke tests
         run: |
