@@ -1,0 +1,172 @@
+name: Auto-Backport Hotfix to Integration
+
+# Workflow automatique pour backporter les hotfixes des branches release vers integration
+# Se déclenche automatiquement quand une PR est mergée sur une branche release/*
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'release/**'
+
+jobs:
+  backport:
+    name: Backport to Integration
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create backport branch
+        id: create-backport
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          SOURCE_BRANCH="${{ github.event.pull_request.head.ref }}"
+          TARGET_BRANCH="integration"
+          BACKPORT_BRANCH="backport/pr-${PR_NUMBER}-to-integration"
+
+          echo "🔄 Creating backport of PR #${PR_NUMBER} to ${TARGET_BRANCH}"
+          echo "Source: ${SOURCE_BRANCH}"
+          echo "Title: ${PR_TITLE}"
+
+          # Récupérer la branche integration
+          git fetch origin ${TARGET_BRANCH}
+          git checkout ${TARGET_BRANCH}
+
+          # Créer la branche de backport
+          git checkout -b ${BACKPORT_BRANCH}
+
+          echo "backport_branch=${BACKPORT_BRANCH}" >> $GITHUB_OUTPUT
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "pr_title=${PR_TITLE}" >> $GITHUB_OUTPUT
+
+      - name: Cherry-pick commits
+        id: cherry-pick
+        continue-on-error: true
+        run: |
+          # Récupérer le merge commit de la PR
+          MERGE_COMMIT=${{ github.event.pull_request.merge_commit_sha }}
+
+          echo "Cherry-picking commit: ${MERGE_COMMIT}"
+
+          if git cherry-pick ${MERGE_COMMIT}; then
+            echo "success=true" >> $GITHUB_OUTPUT
+            echo "✅ Cherry-pick successful"
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "❌ Cherry-pick failed - conflicts detected"
+          fi
+
+      - name: Push backport branch
+        if: steps.cherry-pick.outputs.success == 'true'
+        run: |
+          BACKPORT_BRANCH="${{ steps.create-backport.outputs.backport_branch }}"
+
+          git push origin ${BACKPORT_BRANCH}
+
+          echo "✅ Backport branch pushed: ${BACKPORT_BRANCH}"
+
+      - name: Create Pull Request
+        if: steps.cherry-pick.outputs.success == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ steps.create-backport.outputs.pr_number }}
+          PR_TITLE="${{ steps.create-backport.outputs.pr_title }}"
+          BACKPORT_BRANCH="${{ steps.create-backport.outputs.backport_branch }}"
+
+          BODY="## 🔄 Automatic Backport
+
+This PR backports the changes from #${PR_NUMBER} to \`integration\`.
+
+### Original PR
+- **Title:** ${PR_TITLE}
+- **Number:** #${PR_NUMBER}
+- **Branch:** ${{ github.event.pull_request.head.ref }}
+
+### Why this backport?
+Hotfixes applied to release branches must be backported to \`integration\` to ensure:
+- ORG INTEGRATION stays up-to-date
+- Future releases include this fix
+- No code is lost
+
+### Review
+Please review and merge to complete the backport process.
+
+---
+🤖 Automated backport created by GitHub Actions"
+
+          gh pr create \
+            --base integration \
+            --head ${BACKPORT_BRANCH} \
+            --title "[Backport] ${PR_TITLE} (from #${PR_NUMBER})" \
+            --body "$BODY" \
+            --label "backport" \
+            --label "hotfix"
+
+          echo "✅ Pull Request created for backport"
+
+      - name: Comment on conflicts
+        if: steps.cherry-pick.outputs.success == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=${{ steps.create-backport.outputs.pr_number }}
+
+          COMMENT="## ⚠️ Automatic Backport Failed
+
+The automatic backport of this PR to \`integration\` failed due to conflicts.
+
+### Manual action required:
+1. Checkout \`integration\` branch
+2. Create a new branch: \`backport/pr-${PR_NUMBER}-to-integration\`
+3. Manually cherry-pick or apply the changes from this PR
+4. Resolve conflicts
+5. Create a PR to \`integration\`
+
+### Commands:
+\`\`\`bash
+git checkout integration
+git pull
+git checkout -b backport/pr-${PR_NUMBER}-to-integration
+git cherry-pick ${{ github.event.pull_request.merge_commit_sha }}
+# Resolve conflicts if any
+git push origin backport/pr-${PR_NUMBER}-to-integration
+\`\`\`
+
+---
+🤖 Automated backport attempted by GitHub Actions"
+
+          gh pr comment ${PR_NUMBER} --body "$COMMENT"
+
+          echo "⚠️  Conflict comment posted on PR #${PR_NUMBER}"
+
+      - name: Summary
+        run: |
+          echo "## 🔄 Backport Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Original PR:** #${{ steps.create-backport.outputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Title:** ${{ steps.create-backport.outputs.pr_title }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** integration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.cherry-pick.outputs.success }}" == "true" ]]; then
+            echo "**Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "A backport PR has been automatically created." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status:** ❌ Failed (conflicts)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Manual backport required. See comment on original PR." >> $GITHUB_STEP_SUMMARY
+          fi

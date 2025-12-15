@@ -1,0 +1,209 @@
+name: Create Release Package
+
+# Workflow pour créer un package de release basé sur les PRs avec un label spécifique
+# Usage: Actions → Create Release Package → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version (e.g., v1.2.0)'
+        required: true
+        type: string
+      release_label:
+        description: 'Label to filter PRs (e.g., release-v1.2.0)'
+        required: true
+        type: string
+      target_branch:
+        description: 'Base branch for the release'
+        required: true
+        type: choice
+        options:
+          - integration
+          - main
+        default: 'integration'
+
+env:
+  SFDX_CLI_VERSION: latest
+
+jobs:
+  create-package:
+    name: Create Release Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install GitHub CLI
+        run: |
+          type -p gh >/dev/null || (
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh -y
+          )
+          gh --version
+
+      - name: Find PRs with label
+        id: find-prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "🔍 Searching for merged PRs with label: ${{ github.event.inputs.release_label }}"
+
+          # Récupérer les PRs merged avec le label spécifié
+          PR_LIST=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state merged \
+            --label "${{ github.event.inputs.release_label }}" \
+            --json number,title,mergedAt,mergeCommit \
+            --limit 100)
+
+          echo "Found PRs:"
+          echo "$PR_LIST" | jq -r '.[] | "#\(.number) - \(.title)"'
+
+          # Extraire les numéros de PR
+          PR_NUMBERS=$(echo "$PR_LIST" | jq -r '.[].number' | tr '\n' ',' | sed 's/,$//')
+          PR_COUNT=$(echo "$PR_LIST" | jq '. | length')
+
+          echo "pr_numbers=$PR_NUMBERS" >> $GITHUB_OUTPUT
+          echo "pr_count=$PR_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$PR_COUNT" -eq 0 ]; then
+            echo "❌ No PRs found with label ${{ github.event.inputs.release_label }}"
+            exit 1
+          fi
+
+          echo "✅ Found $PR_COUNT PRs to include in release"
+
+      - name: Create release branch
+        run: |
+          RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
+
+          echo "📦 Creating release branch: $RELEASE_BRANCH"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Créer la branche release
+          git checkout -b "$RELEASE_BRANCH"
+
+          echo "✅ Release branch created: $RELEASE_BRANCH"
+
+      - name: Generate release manifest
+        id: generate-manifest
+        run: |
+          echo "📝 Generating release manifest..."
+
+          MANIFEST_DIR="manifest/releases"
+          mkdir -p "$MANIFEST_DIR"
+
+          MANIFEST_FILE="$MANIFEST_DIR/${{ github.event.inputs.release_version }}.xml"
+
+          # Pour l'instant, copier le package.xml complet
+          # TODO: Améliorer pour extraire seulement les métadonnées des PRs sélectionnées
+          cp manifest/package.xml "$MANIFEST_FILE"
+
+          echo "manifest_path=$MANIFEST_FILE" >> $GITHUB_OUTPUT
+
+          echo "✅ Manifest created: $MANIFEST_FILE"
+          echo ""
+          echo "📋 Manifest content:"
+          cat "$MANIFEST_FILE"
+
+      - name: Commit and push release branch
+        run: |
+          RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
+
+          git add manifest/releases/
+          git commit -m "chore: create release ${{ github.event.inputs.release_version }}
+
+Release package for ${{ github.event.inputs.release_version }}
+
+Includes PRs with label: ${{ github.event.inputs.release_label }}
+PR count: ${{ steps.find-prs.outputs.pr_count }}
+PRs: #${{ steps.find-prs.outputs.pr_numbers }}
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+
+          git push origin "$RELEASE_BRANCH"
+
+          echo "✅ Release branch pushed to GitHub"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
+
+          # Créer les release notes
+          RELEASE_NOTES="## Release ${{ github.event.inputs.release_version }}
+
+### Included PRs (with label: ${{ github.event.inputs.release_label }})
+
+"
+
+          # Ajouter la liste des PRs
+          PR_LIST=$(gh pr list \
+            --repo ${{ github.repository }} \
+            --state merged \
+            --label "${{ github.event.inputs.release_label }}" \
+            --json number,title,author \
+            --limit 100)
+
+          while IFS= read -r pr; do
+            PR_NUMBER=$(echo "$pr" | jq -r '.number')
+            PR_TITLE=$(echo "$pr" | jq -r '.title')
+            PR_AUTHOR=$(echo "$pr" | jq -r '.author.login')
+            RELEASE_NOTES="${RELEASE_NOTES}
+- #${PR_NUMBER}: ${PR_TITLE} (@${PR_AUTHOR})"
+          done < <(echo "$PR_LIST" | jq -c '.[]')
+
+          RELEASE_NOTES="${RELEASE_NOTES}
+
+### Deployment
+
+Use the 'Deploy Release to Environment' workflow to deploy this release to UAT or PRODUCTION.
+
+---
+🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+
+          # Créer la release
+          gh release create "${{ github.event.inputs.release_version }}" \
+            --repo ${{ github.repository }} \
+            --target "$RELEASE_BRANCH" \
+            --title "Release ${{ github.event.inputs.release_version }}" \
+            --notes "$RELEASE_NOTES" \
+            --draft
+
+          echo "✅ GitHub Release created (draft)"
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Release Package Created!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ github.event.inputs.release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** release/${{ github.event.inputs.release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Label:** ${{ github.event.inputs.release_label }}" >> $GITHUB_STEP_SUMMARY
+          echo "**PRs included:** ${{ steps.find-prs.outputs.pr_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 PRs in this release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#${{ steps.find-prs.outputs.pr_numbers }}" | sed 's/,/, #/g' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the GitHub Release (currently in draft)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Publish the release when ready" >> $GITHUB_STEP_SUMMARY
+          echo "3. Use 'Deploy Release to Environment' workflow to deploy to UAT" >> $GITHUB_STEP_SUMMARY

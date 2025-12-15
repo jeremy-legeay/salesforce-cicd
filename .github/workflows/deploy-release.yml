@@ -1,0 +1,148 @@
+name: Deploy Release to Environment
+
+# Workflow pour déployer une release vers UAT ou PRODUCTION
+# Usage: Actions → Deploy Release to Environment → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version to deploy (e.g., v1.2.0)'
+        required: true
+        type: string
+      target_environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - UAT
+          - PRODUCTION
+
+env:
+  SFDX_CLI_VERSION: latest
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.target_environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.target_environment }}
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: release/${{ github.event.inputs.release_version }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Set org alias
+        id: env
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', github.event.inputs.target_environment)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', github.event.inputs.target_environment)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', github.event.inputs.target_environment)] }}
+        run: |
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for ${{ github.event.inputs.target_environment }}"
+            echo "Please configure these secrets in GitHub Settings > Environments > ${{ github.event.inputs.target_environment }}:"
+            echo "  - SF_CONSUMER_KEY_${{ github.event.inputs.target_environment }}"
+            echo "  - SF_USERNAME_${{ github.event.inputs.target_environment }}"
+            echo "  - SF_PRIVATE_KEY_${{ github.event.inputs.target_environment }}"
+            exit 1
+          fi
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
+
+          echo "✅ Successfully authenticated to ${{ github.event.inputs.target_environment }}"
+
+      - name: Check for release manifest
+        id: check-manifest
+        run: |
+          MANIFEST_PATH="manifest/releases/${{ github.event.inputs.release_version }}.xml"
+
+          if [ -f "$MANIFEST_PATH" ]; then
+            echo "manifest_exists=true" >> $GITHUB_OUTPUT
+            echo "manifest_path=$MANIFEST_PATH" >> $GITHUB_OUTPUT
+            echo "✅ Found release manifest: $MANIFEST_PATH"
+          else
+            echo "manifest_exists=false" >> $GITHUB_OUTPUT
+            echo "manifest_path=manifest/package.xml" >> $GITHUB_OUTPUT
+            echo "⚠️  No release-specific manifest found, using manifest/package.xml"
+          fi
+
+      - name: Deploy to Salesforce
+        run: |
+          echo "🚀 Deploying release ${{ github.event.inputs.release_version }} to ${{ github.event.inputs.target_environment }}"
+
+          MANIFEST="${{ steps.check-manifest.outputs.manifest_path }}"
+
+          echo "Using manifest: $MANIFEST"
+
+          # Déterminer le niveau de test selon l'environnement
+          if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            TEST_LEVEL="RunLocalTests"
+            echo "🧪 Running all local tests (PRODUCTION deployment)"
+          else
+            TEST_LEVEL="RunLocalTests"
+            echo "🧪 Running all local tests (UAT deployment)"
+          fi
+
+          sf project deploy start \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --manifest "$MANIFEST" \
+            --test-level "$TEST_LEVEL" \
+            --wait 30 \
+            --verbose
+
+          echo "✅ Deployment completed successfully"
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** ${{ github.event.inputs.release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** ${{ steps.check-manifest.outputs.manifest_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. Test the release on UAT org" >> $GITHUB_STEP_SUMMARY
+            echo "2. If tests pass, deploy to PRODUCTION using this same workflow" >> $GITHUB_STEP_SUMMARY
+            echo "3. If hotfix needed, create PR to release/${{ github.event.inputs.release_version }} branch" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            echo "### ✅ Production Deployment Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Don't forget to:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Merge release/${{ github.event.inputs.release_version }} → main" >> $GITHUB_STEP_SUMMARY
+            echo "2. Sync main → integration" >> $GITHUB_STEP_SUMMARY
+            echo "3. Delete release branch if no longer needed" >> $GITHUB_STEP_SUMMARY
+          fi
