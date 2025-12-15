@@ -8,7 +8,6 @@ public class AccountHelper {
         return [
             SELECT Id, Name, Industry, AnnualRevenue
             FROM Account
-            WHERE IsActive__c = true
             ORDER BY Name
             LIMIT 100
         ];
