@@ -130,6 +130,8 @@ jobs:
       - name: Validate deployment (check-only)
         id: validate
         run: |
+          set +e  # Don't exit on error, we want to capture the output
+
           RESULT=$(sf project deploy start \
             --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
             --manifest manifest/package.xml \
@@ -137,10 +139,29 @@ jobs:
             --dry-run \
             --wait 30 \
             --verbose \
-            --json)
+            --json 2>&1)
 
+          EXIT_CODE=$?
+
+          echo "📋 Deployment output:"
           echo "$RESULT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Deployment validation failed with exit code: $EXIT_CODE"
+            echo "Error details:"
+            echo "$RESULT" | jq '.' || echo "$RESULT"
+            exit $EXIT_CODE
+          fi
+
           JOB_ID=$(echo "$RESULT" | jq -r '.result.id')
+
+          if [ "$JOB_ID" == "null" ] || [ -z "$JOB_ID" ]; then
+            echo "❌ Failed to extract Job ID from result"
+            echo "Full result:"
+            echo "$RESULT" | jq '.'
+            exit 1
+          fi
+
           echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
           echo "✅ Validation Job ID: $JOB_ID"
 
