@@ -33,12 +33,12 @@ public class ContactHelper {
     }
 
     /**
-     * Update contact status to active
+     * Update contact description
      * @param contactId The Contact ID
      */
-    public static void activateContact(Id contactId) {
+    public static void updateContactDescription(Id contactId, String description) {
         Contact c = new Contact(Id = contactId);
-        c.Status__c = 'Active';
+        c.Description = description;
         update c;
     }
 }

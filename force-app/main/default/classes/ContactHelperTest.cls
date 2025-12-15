@@ -61,15 +61,15 @@ private class ContactHelperTest {
     }
 
     @isTest
-    static void testActivateContact() {
+    static void testUpdateContactDescription() {
         Contact con = [SELECT Id FROM Contact LIMIT 1];
 
         Test.startTest();
-        ContactHelper.activateContact(con.Id);
+        ContactHelper.updateContactDescription(con.Id, 'Test Description');
         Test.stopTest();
 
-        Contact updatedContact = [SELECT Status__c FROM Contact WHERE Id = :con.Id];
-        System.assertEquals('Active', updatedContact.Status__c, 'Contact status should be Active');
+        Contact updatedContact = [SELECT Description FROM Contact WHERE Id = :con.Id];
+        System.assertEquals('Test Description', updatedContact.Description, 'Contact description should be updated');
     }
 
     @isTest
