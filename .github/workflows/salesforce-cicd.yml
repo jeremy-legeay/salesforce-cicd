@@ -134,35 +134,18 @@ jobs:
           set +e  # Don't exit on error, we want to capture the output
 
           # Determine test level based on environment
-          # INTEGRATION: Run only our smoke tests (fast feedback)
-          # UAT/PRODUCTION: Run all local tests (full validation)
-          if [[ "${{ steps.env.outputs.ENV_NAME }}" == "INTEGRATION" ]]; then
-            TEST_LEVEL="RunSpecifiedTests"
-            TEST_CLASSES="SmokeTestClass"
-            echo "🧪 Running specified tests: $TEST_CLASSES"
+          # All environments: Run all local tests for proper code coverage
+          TEST_LEVEL="RunLocalTests"
+          echo "🧪 Running all local tests"
 
-            RESULT=$(sf project deploy start \
-              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
-              --manifest manifest/package.xml \
-              --test-level "$TEST_LEVEL" \
-              --tests "$TEST_CLASSES" \
-              --dry-run \
-              --wait 30 \
-              --verbose \
-              --json 2>&1)
-          else
-            TEST_LEVEL="RunLocalTests"
-            echo "🧪 Running all local tests"
-
-            RESULT=$(sf project deploy start \
-              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
-              --manifest manifest/package.xml \
-              --test-level "$TEST_LEVEL" \
-              --dry-run \
-              --wait 30 \
-              --verbose \
-              --json 2>&1)
-          fi
+          RESULT=$(sf project deploy start \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --manifest manifest/package.xml \
+            --test-level "$TEST_LEVEL" \
+            --dry-run \
+            --wait 30 \
+            --verbose \
+            --json 2>&1)
 
           EXIT_CODE=$?
 
