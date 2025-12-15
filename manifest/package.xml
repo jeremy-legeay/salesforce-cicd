@@ -135,12 +135,6 @@
         <name>NamedCredential</name>
     </types>
     
-    <!-- Custom Settings -->
-    <types>
-        <members>*</members>
-        <name>CustomSettings</name>
-    </types>
-    
     <!-- Validation Rules -->
     <types>
         <members>*</members>
