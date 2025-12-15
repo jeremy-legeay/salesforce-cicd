@@ -1,0 +1,359 @@
+name: Salesforce Manual Pipeline
+
+# Ce workflow permet de contrôler manuellement chaque étape du déploiement
+# Comme un pipeline GitLab avec des boutons pour chaque stage
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Target environment to deploy'
+        required: true
+        type: choice
+        options:
+          - INTEGRATION
+          - UAT
+          - PRODUCTION
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - validate
+          - deploy
+          - rollback
+      validation_job_id:
+        description: 'Validation Job ID (for Quick Deploy)'
+        required: false
+        type: string
+
+env:
+  SFDX_CLI_VERSION: latest
+
+jobs:
+  # Job de validation
+  validate:
+    name: Validate on ${{ github.event.inputs.target_environment }}
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'validate'
+    environment: ${{ github.event.inputs.target_environment }}
+    outputs:
+      job_id: ${{ steps.validate.outputs.job_id }}
+      env_name: ${{ github.event.inputs.target_environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Set org alias based on environment
+        id: env
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          else
+            echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', github.event.inputs.target_environment)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', github.event.inputs.target_environment)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', github.event.inputs.target_environment)] }}
+        run: |
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for ${{ github.event.inputs.target_environment }}"
+            echo "Please configure these secrets in GitHub Settings > Environments > ${{ github.event.inputs.target_environment }}:"
+            echo "  - SF_CONSUMER_KEY_${{ github.event.inputs.target_environment }}"
+            echo "  - SF_USERNAME_${{ github.event.inputs.target_environment }}"
+            echo "  - SF_PRIVATE_KEY_${{ github.event.inputs.target_environment }}"
+            exit 1
+          fi
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
+
+      - name: Validate deployment
+        id: validate
+        run: |
+          set +e
+
+          # Déterminer le niveau de test selon l'environnement
+          if [[ "${{ github.event.inputs.target_environment }}" == "INTEGRATION" ]]; then
+            TEST_LEVEL="RunSpecifiedTests"
+            TEST_CLASSES="SmokeTestClass"
+            echo "🧪 Running specified tests: $TEST_CLASSES"
+
+            RESULT=$(sf project deploy start \
+              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+              --manifest manifest/package.xml \
+              --test-level "$TEST_LEVEL" \
+              --tests "$TEST_CLASSES" \
+              --dry-run \
+              --wait 30 \
+              --verbose \
+              --json 2>&1)
+          else
+            TEST_LEVEL="RunLocalTests"
+            echo "🧪 Running all local tests"
+
+            RESULT=$(sf project deploy start \
+              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+              --manifest manifest/package.xml \
+              --test-level "$TEST_LEVEL" \
+              --dry-run \
+              --wait 30 \
+              --verbose \
+              --json 2>&1)
+          fi
+
+          EXIT_CODE=$?
+
+          echo "📋 Validation output:"
+          echo "$RESULT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Validation failed with exit code: $EXIT_CODE"
+            echo "$RESULT" | jq '.' || echo "$RESULT"
+            exit $EXIT_CODE
+          fi
+
+          JOB_ID=$(echo "$RESULT" | jq -r '.result.id')
+
+          if [ "$JOB_ID" == "null" ] || [ -z "$JOB_ID" ]; then
+            echo "❌ Failed to extract Job ID"
+            echo "$RESULT" | jq '.'
+            exit 1
+          fi
+
+          echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
+          echo "✅ Validation Job ID: $JOB_ID"
+
+      - name: Validation Summary
+        run: |
+          echo "## ✅ Validation Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Job ID:** ${{ steps.validate.outputs.job_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Step: Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To deploy this validation, run this workflow again with:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action:** deploy" >> $GITHUB_STEP_SUMMARY
+          echo "- **Validation Job ID:** \`${{ steps.validate.outputs.job_id }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # Job de déploiement
+  deploy:
+    name: Deploy to ${{ github.event.inputs.target_environment }}
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'deploy'
+    environment:
+      name: ${{ github.event.inputs.target_environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Set org alias based on environment
+        id: env
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          else
+            echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', github.event.inputs.target_environment)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', github.event.inputs.target_environment)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', github.event.inputs.target_environment)] }}
+        run: |
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured"
+            exit 1
+          fi
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
+
+      - name: Quick Deploy to Salesforce
+        if: github.event.inputs.validation_job_id != ''
+        run: |
+          echo "🚀 Starting Quick Deploy using validation Job ID: ${{ github.event.inputs.validation_job_id }}"
+
+          sf project deploy quick \
+            --job-id ${{ github.event.inputs.validation_job_id }} \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --wait 30 \
+            --verbose
+
+          echo "✅ Quick Deploy completed successfully"
+
+      - name: Regular Deploy to Salesforce
+        if: github.event.inputs.validation_job_id == ''
+        run: |
+          echo "⚠️ No validation Job ID provided, performing regular deployment"
+          echo "This will re-run all tests and may take longer"
+
+          if [[ "${{ github.event.inputs.target_environment }}" == "INTEGRATION" ]]; then
+            TEST_LEVEL="RunSpecifiedTests"
+            TEST_CLASSES="SmokeTestClass"
+
+            sf project deploy start \
+              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+              --manifest manifest/package.xml \
+              --test-level "$TEST_LEVEL" \
+              --tests "$TEST_CLASSES" \
+              --wait 30 \
+              --verbose
+          else
+            sf project deploy start \
+              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+              --manifest manifest/package.xml \
+              --test-level RunLocalTests \
+              --wait 30 \
+              --verbose
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ github.event.inputs.target_environment }}" == "INTEGRATION" ]]; then
+            echo "### 🎯 Next Step: UAT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. Create a release branch: \`git checkout -b release/vX.Y.Z\`" >> $GITHUB_STEP_SUMMARY
+            echo "2. Validate on UAT using this workflow with:" >> $GITHUB_STEP_SUMMARY
+            echo "   - **Target environment:** UAT" >> $GITHUB_STEP_SUMMARY
+            echo "   - **Action:** validate" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "### 🎯 Next Step: PRODUCTION" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. Merge to main branch" >> $GITHUB_STEP_SUMMARY
+            echo "2. Validate on PRODUCTION using this workflow with:" >> $GITHUB_STEP_SUMMARY
+            echo "   - **Target environment:** PRODUCTION" >> $GITHUB_STEP_SUMMARY
+            echo "   - **Action:** validate" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ Pipeline Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Deployment to PRODUCTION successful!" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # Job de rollback
+  rollback:
+    name: Rollback on ${{ github.event.inputs.target_environment }}
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'rollback'
+    environment: ${{ github.event.inputs.target_environment }}
+
+    steps:
+      - name: Checkout previous version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.before }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Set org alias
+        id: env
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          else
+            echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate
+        env:
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', github.event.inputs.target_environment)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', github.event.inputs.target_environment)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', github.event.inputs.target_environment)] }}
+        run: |
+          echo "${SF_PRIVATE_KEY}" > server.key
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+          rm server.key
+
+      - name: Rollback deployment
+        run: |
+          echo "⏪ Rolling back to previous version"
+
+          sf project deploy start \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --manifest manifest/package.xml \
+            --test-level NoTestRun \
+            --wait 30 \
+            --verbose
+
+      - name: Rollback Summary
+        run: |
+          echo "## ⏪ Rollback Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Rolled back by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
