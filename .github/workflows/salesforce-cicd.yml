@@ -131,17 +131,60 @@ jobs:
       - name: Validate deployment (check-only)
         id: validate
         run: |
-          RESULT=$(sf project deploy start \
-            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
-            --manifest manifest/package.xml \
-            --test-level RunLocalTests \
-            --dry-run \
-            --wait 30 \
-            --verbose \
-            --json)
+          set +e  # Don't exit on error, we want to capture the output
 
+          # Determine test level based on environment
+          # INTEGRATION: Run only our smoke tests (fast feedback)
+          # UAT/PRODUCTION: Run all local tests (full validation)
+          if [[ "${{ steps.env.outputs.ENV_NAME }}" == "INTEGRATION" ]]; then
+            TEST_LEVEL="RunSpecifiedTests"
+            TEST_CLASSES="SmokeTestClass"
+            echo "🧪 Running specified tests: $TEST_CLASSES"
+
+            RESULT=$(sf project deploy start \
+              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+              --manifest manifest/package.xml \
+              --test-level "$TEST_LEVEL" \
+              --tests "$TEST_CLASSES" \
+              --dry-run \
+              --wait 30 \
+              --verbose \
+              --json 2>&1)
+          else
+            TEST_LEVEL="RunLocalTests"
+            echo "🧪 Running all local tests"
+
+            RESULT=$(sf project deploy start \
+              --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+              --manifest manifest/package.xml \
+              --test-level "$TEST_LEVEL" \
+              --dry-run \
+              --wait 30 \
+              --verbose \
+              --json 2>&1)
+          fi
+
+          EXIT_CODE=$?
+
+          echo "📋 Deployment output:"
           echo "$RESULT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Deployment validation failed with exit code: $EXIT_CODE"
+            echo "Error details:"
+            echo "$RESULT" | jq '.' || echo "$RESULT"
+            exit $EXIT_CODE
+          fi
+
           JOB_ID=$(echo "$RESULT" | jq -r '.result.id')
+
+          if [ "$JOB_ID" == "null" ] || [ -z "$JOB_ID" ]; then
+            echo "❌ Failed to extract Job ID from result"
+            echo "Full result:"
+            echo "$RESULT" | jq '.'
+            exit 1
+          fi
+
           echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
           echo "✅ Validation Job ID: $JOB_ID"
 

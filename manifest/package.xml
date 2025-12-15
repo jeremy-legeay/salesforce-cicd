@@ -73,14 +73,7 @@
         <members>*</members>
         <name>PermissionSet</name>
     </types>
-    
-    <!-- Profiles (attention en production) -->
-    <types>
-        <members>Admin</members>
-        <members>Standard User</members>
-        <name>Profile</name>
-    </types>
-    
+
     <!-- Flows -->
     <types>
         <members>*</members>
@@ -98,19 +91,7 @@
         <members>*</members>
         <name>EmailTemplate</name>
     </types>
-    
-    <!-- Reports -->
-    <types>
-        <members>*</members>
-        <name>Report</name>
-    </types>
-    
-    <!-- Dashboards -->
-    <types>
-        <members>*</members>
-        <name>Dashboard</name>
-    </types>
-    
+
     <!-- Custom Labels -->
     <types>
         <members>*</members>
@@ -133,12 +114,6 @@
     <types>
         <members>*</members>
         <name>NamedCredential</name>
-    </types>
-    
-    <!-- Custom Settings -->
-    <types>
-        <members>*</members>
-        <name>CustomSettings</name>
     </types>
     
     <!-- Validation Rules -->
