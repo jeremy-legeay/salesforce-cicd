@@ -1,16 +1,34 @@
 # 🚀 CI/CD Salesforce avec GitHub Actions
 
-Pipeline complet de CI/CD pour déployer automatiquement sur Salesforce avec 4 environnements, validation manuelle et **Quick Deploy** pour des déploiements ultra-rapides.
+Pipeline complet de CI/CD pour déployer sur Salesforce avec **2 modes** : automatique (GitOps) ou manuel (GitLab-style), validation manuelle et **Quick Deploy** pour des déploiements ultra-rapides.
+
+## ⚡ Nouveauté : 2 Workflows Disponibles
+
+Vous pouvez choisir entre :
+
+1. **🔄 Workflow Automatique** (`.github/workflows/salesforce-cicd.yml`)
+   - Déclenchement automatique sur Push/Pull Request
+   - Pipeline GitOps classique
+   - Parfait pour le développement quotidien
+
+2. **🎮 Workflow Manuel** (`.github/workflows/salesforce-pipeline.yml`) ⭐ **NOUVEAU**
+   - Boutons manuels pour chaque action (validate/deploy/rollback)
+   - Contrôle total type GitLab
+   - Parfait pour les releases planifiées
+
+👉 **[Voir la comparaison complète des workflows](WORKFLOWS_COMPARISON.md)**
 
 ## 📋 Table des matières
 
+- [Nouveauté : 2 Workflows](#nouveauté--2-workflows-disponibles)
 - [Architecture](#architecture)
 - [Prérequis](#prérequis)
-- [Installation](#installation)
+- [Installation Rapide](#installation-rapide)
+- [Workflows](#workflows)
+  - [Workflow Automatique](#workflow-automatique)
+  - [Workflow Manuel](#workflow-manuel--nouveau)
 - [Configuration](#configuration)
-- [Utilisation](#utilisation)
-- [Workflow de déploiement](#workflow-de-déploiement)
-- [Commandes utiles](#commandes-utiles)
+- [Guides Détaillés](#guides-détaillés)
 - [Dépannage](#dépannage)
 
 ## 🏗️ Architecture
@@ -191,6 +209,60 @@ Dans **Settings > Branches**, créez des règles pour :
 - `uat` : 2 reviewers, status checks required
 - `integration` : 1 reviewer, status checks required
 - `develop` : 1 reviewer
+
+## 🎮 Workflows
+
+Vous disposez de **2 workflows** différents pour gérer vos déploiements :
+
+### Workflow Automatique
+
+**Déclenchement** : Automatique sur Push ou Pull Request
+
+**Utilisation** :
+1. Créez une Pull Request vers `integration`, `uat`, ou `main`
+2. Le workflow valide automatiquement votre code
+3. Après approbation du reviewer, mergez la PR
+4. Le déploiement se fait automatiquement
+
+**Idéal pour** :
+- ✅ Développement quotidien
+- ✅ Équipes habituées à GitOps
+- ✅ Process standardisé
+
+📖 **Guide complet** : [QUICK_START.md](QUICK_START.md)
+
+### Workflow Manuel ⭐ NOUVEAU
+
+**Déclenchement** : Manuel via bouton "Run workflow"
+
+**Utilisation** :
+1. Allez sur **Actions** → **Salesforce Manual Pipeline**
+2. Cliquez sur **Run workflow**
+3. Choisissez :
+   - **Environment** : INTEGRATION / UAT / PRODUCTION
+   - **Action** : validate / deploy / rollback
+   - **Job ID** : (pour Quick Deploy après validation)
+4. Cliquez **Run workflow**
+
+**Avantages** :
+- 🎯 Contrôle total sur chaque étape
+- ⚡ Quick Deploy avec Job ID
+- ⏪ Rollback en un clic
+- 🎮 Interface type GitLab
+
+**Idéal pour** :
+- ✅ Releases planifiées
+- ✅ Déploiements coordonnés
+- ✅ Hotfixes urgents
+- ✅ Besoin de rollback facile
+
+📖 **Guide complet** : [MANUAL_PIPELINE_GUIDE.md](MANUAL_PIPELINE_GUIDE.md)
+
+### Quelle workflow choisir ?
+
+👉 **[Voir la comparaison complète](WORKFLOWS_COMPARISON.md)** pour choisir le workflow adapté à votre équipe.
+
+**Recommandation** : Utilisez le workflow **Manuel** pour UAT et PRODUCTION, et le workflow **Automatique** pour INTEGRATION.
 
 ## 🚀 Utilisation
 
@@ -410,7 +482,29 @@ git commit -m "chore: resolve merge conflicts"
 git push origin uat
 ```
 
-## 📚 Ressources
+## 📖 Guides Détaillés
+
+Ce projet contient plusieurs guides pour vous aider :
+
+### Configuration et Démarrage
+- **[QUICK_START.md](QUICK_START.md)** - Guide de démarrage rapide (workflow automatique)
+- **[JWT_SETUP_GUIDE.md](JWT_SETUP_GUIDE.md)** - Configuration de l'authentification JWT
+- **[APPROVALS_SETUP.md](APPROVALS_SETUP.md)** - Configuration des approbations GitHub
+
+### Workflows
+- **[MANUAL_PIPELINE_GUIDE.md](MANUAL_PIPELINE_GUIDE.md)** - Guide complet du workflow manuel ⭐
+- **[WORKFLOWS_COMPARISON.md](WORKFLOWS_COMPARISON.md)** - Comparaison des workflows (auto vs manuel)
+
+### Développement
+- **[DEV_WORKFLOW.md](DEV_WORKFLOW.md)** - Workflow de développement quotidien
+- **[GIT_COMMANDS.md](GIT_COMMANDS.md)** - Commandes Git utiles
+- **[BEST_PRACTICES.md](BEST_PRACTICES.md)** - Bonnes pratiques Salesforce CI/CD
+
+### Architecture
+- **[FILE_STRUCTURE.md](FILE_STRUCTURE.md)** - Structure du projet
+- **[INDEX.md](INDEX.md)** - Index complet de la documentation
+
+## 📚 Ressources Externes
 
 - [Salesforce CLI Documentation](https://developer.salesforce.com/docs/atlas.en-us.sfdx_cli_reference.meta/sfdx_cli_reference/)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
