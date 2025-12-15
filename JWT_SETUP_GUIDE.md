@@ -296,4 +296,3 @@ Lancez le pipeline pour vérifier que l'authentification fonctionne avec le nouv
 **Configuration terminée ! 🎉**
 
 Votre pipeline utilise maintenant l'authentification JWT sécurisée.
-test
