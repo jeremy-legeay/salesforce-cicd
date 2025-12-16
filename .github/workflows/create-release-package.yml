@@ -60,7 +60,6 @@ jobs:
         run: |
           echo "🔍 Searching for merged PRs with label: ${{ github.event.inputs.release_label }}"
 
-          # Récupérer les PRs merged avec le label spécifié
           PR_LIST=$(gh pr list \
             --repo ${{ github.repository }} \
             --state merged \
@@ -71,7 +70,6 @@ jobs:
           echo "Found PRs:"
           echo "$PR_LIST" | jq -r '.[] | "#\(.number) - \(.title)"'
 
-          # Extraire les numéros de PR
           PR_NUMBERS=$(echo "$PR_LIST" | jq -r '.[].number' | tr '\n' ',' | sed 's/,$//')
           PR_COUNT=$(echo "$PR_LIST" | jq '. | length')
 
@@ -94,7 +92,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Créer la branche release
           git checkout -b "$RELEASE_BRANCH"
 
           echo "✅ Release branch created: $RELEASE_BRANCH"
@@ -109,8 +106,6 @@ jobs:
 
           MANIFEST_FILE="$MANIFEST_DIR/${{ github.event.inputs.release_version }}.xml"
 
-          # Pour l'instant, copier le package.xml complet
-          # TODO: Améliorer pour extraire seulement les métadonnées des PRs sélectionnées
           cp manifest/package.xml "$MANIFEST_FILE"
 
           echo "manifest_path=$MANIFEST_FILE" >> $GITHUB_OUTPUT
@@ -125,7 +120,7 @@ jobs:
           RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
 
           git add manifest/releases/
-          git commit -m "chore: create release ${{ github.event.inputs.release_version }} with ${{ steps.find-prs.outputs.pr_count }} PRs (label: ${{ github.event.inputs.release_label }})"
+          git commit -m "chore: create release ${{ github.event.inputs.release_version }}"
 
           git push origin "$RELEASE_BRANCH"
 
@@ -137,47 +132,28 @@ jobs:
         run: |
           RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
 
-          # Créer les release notes
-          cat > /tmp/release_notes.md << 'NOTES_EOF'
-## Release ${{ github.event.inputs.release_version }}
+          echo "## Release ${{ github.event.inputs.release_version }}" > /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "### Included PRs" >> /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
 
-### Included PRs (with label: ${{ github.event.inputs.release_label }})
-
-NOTES_EOF
-
-          # Ajouter la liste des PRs
-          PR_LIST=$(gh pr list \
+          gh pr list \
             --repo ${{ github.repository }} \
             --state merged \
             --label "${{ github.event.inputs.release_label }}" \
             --json number,title,author \
-            --limit 100)
+            --limit 100 | jq -r '.[] | "- #\(.number): \(.title) (@\(.author.login))"' >> /tmp/release_notes.md
 
-          echo "$PR_LIST" | jq -c '.[]' | while IFS= read -r pr; do
-            PR_NUMBER=$(echo "$pr" | jq -r '.number')
-            PR_TITLE=$(echo "$pr" | jq -r '.title')
-            PR_AUTHOR=$(echo "$pr" | jq -r '.author.login')
-            echo "- #${PR_NUMBER}: ${PR_TITLE} (@${PR_AUTHOR})" >> /tmp/release_notes.md
-          done
+          echo "" >> /tmp/release_notes.md
+          echo "### Deployment" >> /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "Use the Deploy Release to Environment workflow to deploy this release to UAT or PRODUCTION." >> /tmp/release_notes.md
 
-          cat >> /tmp/release_notes.md << 'NOTES_EOF'
-
-### Deployment
-
-Use the 'Deploy Release to Environment' workflow to deploy this release to UAT or PRODUCTION.
-
----
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-NOTES_EOF
-
-          RELEASE_NOTES=$(cat /tmp/release_notes.md)
-
-          # Créer la release
           gh release create "${{ github.event.inputs.release_version }}" \
             --repo ${{ github.repository }} \
             --target "$RELEASE_BRANCH" \
             --title "Release ${{ github.event.inputs.release_version }}" \
-            --notes "$RELEASE_NOTES" \
+            --notes-file /tmp/release_notes.md \
             --draft
 
           echo "✅ GitHub Release created (draft)"
@@ -190,10 +166,6 @@ NOTES_EOF
           echo "**Branch:** release/${{ github.event.inputs.release_version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Label:** ${{ github.event.inputs.release_label }}" >> $GITHUB_STEP_SUMMARY
           echo "**PRs included:** ${{ steps.find-prs.outputs.pr_count }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📋 PRs in this release" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#${{ steps.find-prs.outputs.pr_numbers }}" | sed 's/,/, #/g' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
