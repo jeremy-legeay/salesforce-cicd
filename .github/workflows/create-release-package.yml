@@ -26,6 +26,10 @@ on:
 env:
   SFDX_CLI_VERSION: latest
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   create-package:
     name: Create Release Package
