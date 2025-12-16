@@ -125,17 +125,7 @@ jobs:
           RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
 
           git add manifest/releases/
-          git commit -m "chore: create release ${{ github.event.inputs.release_version }}
-
-Release package for ${{ github.event.inputs.release_version }}
-
-Includes PRs with label: ${{ github.event.inputs.release_label }}
-PR count: ${{ steps.find-prs.outputs.pr_count }}
-PRs: #${{ steps.find-prs.outputs.pr_numbers }}
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+          git commit -m "chore: create release ${{ github.event.inputs.release_version }} with ${{ steps.find-prs.outputs.pr_count }} PRs (label: ${{ github.event.inputs.release_label }})"
 
           git push origin "$RELEASE_BRANCH"
 
@@ -148,11 +138,12 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
           RELEASE_BRANCH="release/${{ github.event.inputs.release_version }}"
 
           # Créer les release notes
-          RELEASE_NOTES="## Release ${{ github.event.inputs.release_version }}
+          cat > /tmp/release_notes.md << 'NOTES_EOF'
+## Release ${{ github.event.inputs.release_version }}
 
 ### Included PRs (with label: ${{ github.event.inputs.release_label }})
 
-"
+NOTES_EOF
 
           # Ajouter la liste des PRs
           PR_LIST=$(gh pr list \
@@ -162,22 +153,24 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
             --json number,title,author \
             --limit 100)
 
-          while IFS= read -r pr; do
+          echo "$PR_LIST" | jq -c '.[]' | while IFS= read -r pr; do
             PR_NUMBER=$(echo "$pr" | jq -r '.number')
             PR_TITLE=$(echo "$pr" | jq -r '.title')
             PR_AUTHOR=$(echo "$pr" | jq -r '.author.login')
-            RELEASE_NOTES="${RELEASE_NOTES}
-- #${PR_NUMBER}: ${PR_TITLE} (@${PR_AUTHOR})"
-          done < <(echo "$PR_LIST" | jq -c '.[]')
+            echo "- #${PR_NUMBER}: ${PR_TITLE} (@${PR_AUTHOR})" >> /tmp/release_notes.md
+          done
 
-          RELEASE_NOTES="${RELEASE_NOTES}
+          cat >> /tmp/release_notes.md << 'NOTES_EOF'
 
 ### Deployment
 
 Use the 'Deploy Release to Environment' workflow to deploy this release to UAT or PRODUCTION.
 
 ---
-🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+NOTES_EOF
+
+          RELEASE_NOTES=$(cat /tmp/release_notes.md)
 
           # Créer la release
           gh release create "${{ github.event.inputs.release_version }}" \
