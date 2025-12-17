@@ -1,6 +1,8 @@
 name: Deploy Release to Environment
 
 # Workflow pour déployer une release vers UAT ou PRODUCTION
+# Étape 1 : Validation avec tests (dry-run)
+# Étape 2 : Déploiement rapide après approbation manuelle
 # Usage: Actions → Deploy Release to Environment → Run workflow
 
 on:
@@ -22,10 +24,12 @@ env:
   SFDX_CLI_VERSION: latest
 
 jobs:
-  deploy:
-    name: Deploy to ${{ github.event.inputs.target_environment }}
+  validate:
+    name: Validate deployment to ${{ github.event.inputs.target_environment }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.target_environment }}
+    outputs:
+      validation_id: ${{ steps.validation.outputs.validation_id }}
 
     steps:
       - name: Checkout release
@@ -96,9 +100,11 @@ jobs:
             echo "⚠️  No release-specific manifest found, using manifest/package.xml"
           fi
 
-      - name: Deploy to Salesforce
+      - name: Validate deployment (dry-run with tests)
+        id: validation
         run: |
-          echo "🚀 Deploying release ${{ github.event.inputs.release_version }} to ${{ github.event.inputs.target_environment }}"
+          echo "🔍 Validating release ${{ github.event.inputs.release_version }} for ${{ github.event.inputs.target_environment }}"
+          echo "This will run all tests without deploying the code"
 
           MANIFEST="${{ steps.check-manifest.outputs.manifest_path }}"
 
@@ -107,20 +113,117 @@ jobs:
           # Déterminer le niveau de test selon l'environnement
           if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
             TEST_LEVEL="RunLocalTests"
-            echo "🧪 Running all local tests (PRODUCTION deployment)"
+            echo "🧪 Running all local tests (PRODUCTION validation)"
           else
             TEST_LEVEL="RunLocalTests"
-            echo "🧪 Running all local tests (UAT deployment)"
+            echo "🧪 Running all local tests (UAT validation)"
           fi
 
-          sf project deploy start \
+          # Validation avec --dry-run et capture de l'ID
+          RESULT=$(sf project deploy start \
             --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
             --manifest "$MANIFEST" \
             --test-level "$TEST_LEVEL" \
+            --dry-run \
             --wait 30 \
+            --verbose \
+            --json 2>&1)
+
+          echo "Deployment result:"
+          echo "$RESULT"
+
+          # Extraire l'ID de validation
+          VALIDATION_ID=$(echo "$RESULT" | jq -r '.result.id // empty')
+
+          if [ -n "$VALIDATION_ID" ]; then
+            echo "validation_id=$VALIDATION_ID" >> $GITHUB_OUTPUT
+            echo "✅ Validation completed successfully"
+            echo "📋 Validation ID: $VALIDATION_ID"
+          else
+            echo "❌ Failed to get validation ID"
+            exit 1
+          fi
+
+      - name: Validation Summary
+        run: |
+          echo "## ✅ Validation Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** ${{ github.event.inputs.release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** ${{ steps.check-manifest.outputs.manifest_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Validation ID:** \`${{ steps.validation.outputs.validation_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Next Step" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The validation passed! All tests succeeded." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**To deploy, approve the 'quick-deploy' job below.**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The quick deploy will use the validation ID above to deploy instantly without re-running tests." >> $GITHUB_STEP_SUMMARY
+
+  quick-deploy:
+    name: Quick Deploy to ${{ github.event.inputs.target_environment }}
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: ${{ github.event.inputs.target_environment }}
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: release/${{ github.event.inputs.release_version }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Set org alias
+        id: env
+        run: |
+          if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
+            echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Salesforce
+        env:
+          SF_CONSUMER_KEY: ${{ secrets[format('SF_CONSUMER_KEY_{0}', github.event.inputs.target_environment)] }}
+          SF_USERNAME: ${{ secrets[format('SF_USERNAME_{0}', github.event.inputs.target_environment)] }}
+          SF_PRIVATE_KEY: ${{ secrets[format('SF_PRIVATE_KEY_{0}', github.event.inputs.target_environment)] }}
+        run: |
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias ${{ steps.env.outputs.ORG_ALIAS }} \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
+
+          echo "✅ Successfully authenticated to ${{ github.event.inputs.target_environment }}"
+
+      - name: Quick Deploy using validation ID
+        run: |
+          echo "🚀 Quick deploying release ${{ github.event.inputs.release_version }} to ${{ github.event.inputs.target_environment }}"
+          echo "Using validation ID: ${{ needs.validate.outputs.validation_id }}"
+
+          sf project deploy quick \
+            --job-id "${{ needs.validate.outputs.validation_id }}" \
+            --target-org ${{ steps.env.outputs.ORG_ALIAS }} \
+            --wait 10 \
             --verbose
 
-          echo "✅ Deployment completed successfully"
+          echo "✅ Quick deployment completed successfully"
 
       - name: Deployment Summary
         run: |
@@ -128,7 +231,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Release:** ${{ github.event.inputs.release_version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ github.event.inputs.target_environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Manifest:** ${{ steps.check-manifest.outputs.manifest_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Validation ID:** \`${{ needs.validate.outputs.validation_id }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
