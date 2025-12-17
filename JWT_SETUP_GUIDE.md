@@ -66,7 +66,28 @@ Email Address []:
 
 3. **Save** et **attendre 2-10 minutes** (propagation Salesforce)
 
-### Étape 3 : Récupérer le Consumer Key
+### Étape 3 : Configurer les permissions OAuth
+
+**IMPORTANT** : Après avoir créé la Connected App, vous devez configurer les permissions d'accès :
+
+1. **Setup** → **App Manager**
+2. Trouvez **GitHub CI/CD JWT** → **▼** → **Manage**
+3. **Edit Policies**
+4. Dans la section **OAuth Policies** :
+   - **Permitted Users** : Sélectionnez **"Admin approved users are pre-authorized"**
+   - **Save**
+5. Cliquez sur **Manage Profiles** (ou **Manage Permission Sets**)
+6. Ajoutez les profils autorisés :
+   - ✅ **System Administrator** (minimum requis)
+   - Ou les profils/permission sets des utilisateurs CI/CD
+7. **Save**
+
+**Pourquoi cette étape est importante** :
+- Par défaut, même avec JWT, l'utilisateur doit approuver la Connected App
+- Cette configuration pré-autorise les profils sélectionnés
+- Plus sécurisé que "All users may self-authorize" car contrôle explicite des accès
+
+### Étape 4 : Récupérer le Consumer Key
 
 **Pour chaque Connected App** :
 
@@ -81,7 +102,7 @@ Email Address []:
 3MVG9wt4IL4O5wvK8Z9Y1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
 ```
 
-### Étape 4 : Configurer les secrets GitHub
+### Étape 5 : Configurer les secrets GitHub
 
 **Pour CHAQUE environnement** GitHub (INTEGRATION, UAT, PRODUCTION) :
 
@@ -201,10 +222,19 @@ Successfully authorized admin@company-int.com with org ID 00D...
 
 ### Erreur : "user hasn't approved this consumer"
 
-**Cause** : L'utilisateur n'a pas approuvé la Connected App
+**Cause** : L'utilisateur n'a pas approuvé la Connected App OU le profil de l'utilisateur n'est pas autorisé
 
 **Solution** :
-1. Connectez-vous manuellement une fois avec JWT :
+1. **Vérifiez la configuration OAuth** (RECOMMANDÉ) :
+   - Setup → App Manager → GitHub CI/CD JWT → Manage
+   - Edit Policies
+   - **Permitted Users** : Changez en **"Admin approved users are pre-authorized"**
+   - Save
+   - Cliquez sur **Manage Profiles**
+   - Ajoutez le profil **System Administrator**
+   - Save
+
+2. **OU** connectez-vous manuellement une fois avec JWT (alternative) :
    ```bash
    sf org login jwt \
      --client-id "CONSUMER_KEY" \
@@ -212,7 +242,8 @@ Successfully authorized admin@company-int.com with org ID 00D...
      --username "admin@company-int.com" \
      --instance-url https://login.salesforce.com
    ```
-2. Ou dans Salesforce : Setup → Connected Apps → Manage Connected Apps → Approuvez l'app pour l'utilisateur
+
+**Note** : La solution 1 est préférable car elle évite l'approbation manuelle pour chaque utilisateur
 
 ### Erreur : "JWT secrets not configured"
 
