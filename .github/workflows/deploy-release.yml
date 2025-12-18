@@ -1,6 +1,6 @@
 name: Deploy Release to Environment
 
-# Workflow pour déployer une release vers UAT ou PRODUCTION
+# Workflow pour déployer une release vers PREPROD ou PRODUCTION
 # Étape 1 : Validation avec tests (dry-run)
 # Étape 2 : Déploiement rapide après approbation manuelle
 # Usage: Actions → Deploy Release to Environment → Run workflow
@@ -17,7 +17,7 @@ on:
         required: true
         type: choice
         options:
-          - UAT
+          - PREPROD
           - PRODUCTION
 
 env:
@@ -53,8 +53,8 @@ jobs:
         run: |
           if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
-            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "PREPROD" ]]; then
+            echo "ORG_ALIAS=preprod" >> $GITHUB_OUTPUT
           fi
 
       - name: Authenticate to Salesforce
@@ -116,7 +116,7 @@ jobs:
             echo "🧪 Running all local tests (PRODUCTION validation)"
           else
             TEST_LEVEL="RunLocalTests"
-            echo "🧪 Running all local tests (UAT validation)"
+            echo "🧪 Running all local tests (PREPROD validation)"
           fi
 
           # Validation avec --dry-run et capture de l'ID
@@ -189,8 +189,8 @@ jobs:
         run: |
           if [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
-            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.target_environment }}" == "PREPROD" ]]; then
+            echo "ORG_ALIAS=preprod" >> $GITHUB_OUTPUT
           fi
 
       - name: Authenticate to Salesforce
@@ -235,10 +235,10 @@ jobs:
           echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [[ "${{ github.event.inputs.target_environment }}" == "UAT" ]]; then
+          if [[ "${{ github.event.inputs.target_environment }}" == "PREPROD" ]]; then
             echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "1. Test the release on UAT org" >> $GITHUB_STEP_SUMMARY
+            echo "1. Test the release on PREPROD org" >> $GITHUB_STEP_SUMMARY
             echo "2. If tests pass, deploy to PRODUCTION using this same workflow" >> $GITHUB_STEP_SUMMARY
             echo "3. If hotfix needed, create PR to release/${{ github.event.inputs.release_version }} branch" >> $GITHUB_STEP_SUMMARY
           elif [[ "${{ github.event.inputs.target_environment }}" == "PRODUCTION" ]]; then

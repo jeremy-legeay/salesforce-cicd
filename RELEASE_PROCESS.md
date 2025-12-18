@@ -7,7 +7,7 @@ Guide simplifié pour gérer les releases Salesforce avec GitHub Actions.
 Ce système permet de :
 - ✅ Sélectionner les PRs à inclure dans une release via des **labels**
 - ✅ Créer un package de release déployable
-- ✅ Déployer le **même package** sur UAT puis PRODUCTION
+- ✅ Déployer le **même package** sur PREPROD puis PRODUCTION
 - ✅ Backporter automatiquement les hotfixes vers `integration`
 
 ---
@@ -74,7 +74,7 @@ feature/ma-fonctionnalite → PR → integration → ORG INTEGRATION (automatiqu
 
 ## 🎯 Déployer une Release
 
-### Déploiement sur UAT
+### Déploiement sur PREPROD
 
 1. **Aller dans Actions** → `Deploy Release to Environment`
 
@@ -82,29 +82,29 @@ feature/ma-fonctionnalite → PR → integration → ORG INTEGRATION (automatiqu
 
 3. **Remplir le formulaire** :
    - **Release version** : `v1.2.0`
-   - **Target environment** : `UAT`
+   - **Target environment** : `PREPROD`
 
 4. **Lancer** : Le workflow va :
    - ✅ Checkout de la branche `release/v1.2.0`
-   - ✅ Authentification JWT sur UAT
+   - ✅ Authentification JWT sur PREPROD
    - ✅ Déploiement avec RunLocalTests
    - ✅ Vérification et validation
 
-5. **Tester sur UAT** : Tests fonctionnels, validation métier
+5. **Tester sur PREPROD** : Tests fonctionnels, validation métier
 
 ### Déploiement sur PRODUCTION
 
-**⚠️ Important** : Déployez le **même package** testé sur UAT !
+**⚠️ Important** : Déployez le **même package** testé sur PREPROD !
 
 1. **Aller dans Actions** → `Deploy Release to Environment`
 
 2. **Cliquer sur "Run workflow"**
 
 3. **Remplir le formulaire** :
-   - **Release version** : `v1.2.0` (même version que UAT)
+   - **Release version** : `v1.2.0` (même version que PREPROD)
    - **Target environment** : `PRODUCTION`
 
-4. **Lancer** : Le déploiement utilisera exactement la même branche et le même code que UAT
+4. **Lancer** : Le déploiement utilisera exactement la même branche et le même code que PREPROD
 
 5. **Après déploiement** :
    - Merger `release/v1.2.0` → `main`
@@ -116,7 +116,7 @@ feature/ma-fonctionnalite → PR → integration → ORG INTEGRATION (automatiqu
 
 ### Appliquer un hotfix sur une release
 
-Si un bug est découvert sur UAT ou PRODUCTION après une release :
+Si un bug est découvert sur PREPROD ou PRODUCTION après une release :
 
 1. **Créer une branche depuis la release** :
    ```
@@ -156,7 +156,7 @@ Si le backport automatique échoue (conflits détectés) :
 |----------|---------------|-------|
 | **Salesforce CI/CD** | Push/PR sur `integration` | ✅ Automatique - Déploiement continu sur INTEGRATION |
 | **Create Release Package** | Manuel (workflow_dispatch) | 📦 Créer une release avec les PRs labelisées |
-| **Deploy Release to Environment** | Manuel (workflow_dispatch) | 🚀 Déployer une release sur UAT ou PRODUCTION |
+| **Deploy Release to Environment** | Manuel (workflow_dispatch) | 🚀 Déployer une release sur PREPROD ou PRODUCTION |
 | **Auto-Backport Hotfix** | PR merged sur `release/**` | 🔄 Automatique - Backporter les hotfixes vers integration |
 
 ---
@@ -183,24 +183,24 @@ Si le backport automatique échoue (conflits détectés) :
    - Label: `release-v1.2.0`
    - Résultat : Branche `release/v1.2.0` avec PR #20 et #21 (pas la #22)
 
-**Semaine 3 : Déploiement UAT**
+**Semaine 3 : Déploiement PREPROD**
 
 5. Actions → `Deploy Release to Environment`
    - Version: `v1.2.0`
-   - Target: `UAT`
-   - Tests sur UAT OK ✅
+   - Target: `PREPROD`
+   - Tests sur PREPROD OK ✅
 
-**Semaine 4 : Bug découvert sur UAT**
+**Semaine 4 : Bug découvert sur PREPROD**
 
 6. Hotfix urgent
    - Branche `hotfix/fix-notif-bug` depuis `release/v1.2.0`
    - PR #25 vers `release/v1.2.0` → Merge
    - **Backport automatique** vers `integration` ✅
 
-7. Re-déploiement UAT avec le fix
+7. Re-déploiement PREPROD avec le fix
    - Actions → `Deploy Release to Environment`
    - Version: `v1.2.0` (mise à jour)
-   - Target: `UAT`
+   - Target: `PREPROD`
    - Tests OK ✅
 
 **Semaine 4 : Déploiement PRODUCTION**
@@ -228,10 +228,10 @@ Configurer ces secrets dans **Settings → Environments** :
 - `SF_USERNAME_INTEGRATION`
 - `SF_PRIVATE_KEY_INTEGRATION`
 
-**UAT**
-- `SF_CONSUMER_KEY_UAT`
-- `SF_USERNAME_UAT`
-- `SF_PRIVATE_KEY_UAT`
+**PREPROD**
+- `SF_CONSUMER_KEY_PREPROD`
+- `SF_USERNAME_PREPROD`
+- `SF_PRIVATE_KEY_PREPROD`
 
 **PRODUCTION**
 - `SF_CONSUMER_KEY_PRODUCTION`
@@ -261,6 +261,7 @@ Voir [JWT_SETUP_GUIDE.md](JWT_SETUP_GUIDE.md) pour la configuration détaillée.
 ## 📚 Documentation complémentaire
 
 - [JWT_SETUP_GUIDE.md](JWT_SETUP_GUIDE.md) - Configuration JWT détaillée
+- [AJOUT_ENVIRONNEMENT.md](AJOUT_ENVIRONNEMENT.md) - Ajouter des environnements intermédiaires (QA, STAGING, etc.)
 - [GIT_COMMANDS.md](GIT_COMMANDS.md) - Commandes Git utiles
 - [BEST_PRACTICES.md](BEST_PRACTICES.md) - Bonnes pratiques Salesforce
 - [archive/](archive/) - Ancienne documentation (référence)

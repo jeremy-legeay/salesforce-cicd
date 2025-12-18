@@ -4,12 +4,10 @@ on:
   push:
     branches:
       - integration
-      - uat
       - main
   pull_request:
     branches:
       - integration
-      - uat
       - main
 
 env:
@@ -20,7 +18,7 @@ jobs:
   validate:
     name: Validate & Test
     runs-on: ubuntu-latest
-    environment: ${{ (github.event_name == 'pull_request' && github.base_ref || github.ref_name) == 'main' && 'PRODUCTION' || (github.event_name == 'pull_request' && github.base_ref || github.ref_name) == 'uat' && 'UAT' || 'INTEGRATION' }}
+    environment: ${{ (github.event_name == 'pull_request' && github.base_ref || github.ref_name) == 'main' && 'PRODUCTION' || 'INTEGRATION' }}
     outputs:
       env_name: ${{ steps.env.outputs.ENV_NAME }}
       job_id: ${{ steps.validate.outputs.job_id }}
@@ -62,17 +60,13 @@ jobs:
             echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
             echo "✅ Environment detected: PRODUCTION"
-          elif [[ "$BRANCH" == "uat" ]]; then
-            echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
-            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
-            echo "✅ Environment detected: UAT"
           elif [[ "$BRANCH" == "integration" ]]; then
             echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
             echo "✅ Environment detected: INTEGRATION"
           else
             echo "❌ Error: Branch $BRANCH is not configured for CI/CD"
-            echo "Only integration, uat, and main branches trigger deployments"
+            echo "Only integration and main branches trigger deployments"
             exit 1
           fi
 
@@ -226,17 +220,13 @@ jobs:
             echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
             echo "✅ Environment detected: PRODUCTION"
-          elif [[ "$BRANCH" == "uat" ]]; then
-            echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
-            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
-            echo "✅ Environment detected: UAT"
           elif [[ "$BRANCH" == "integration" ]]; then
             echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
             echo "✅ Environment detected: INTEGRATION"
           else
             echo "❌ Error: Branch $BRANCH is not configured for CI/CD"
-            echo "Only integration, uat, and main branches trigger deployments"
+            echo "Only integration and main branches trigger deployments"
             exit 1
           fi
 
@@ -336,17 +326,13 @@ jobs:
             echo "ENV_NAME=PRODUCTION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=production" >> $GITHUB_OUTPUT
             echo "✅ Environment detected: PRODUCTION"
-          elif [[ "$BRANCH" == "uat" ]]; then
-            echo "ENV_NAME=UAT" >> $GITHUB_OUTPUT
-            echo "ORG_ALIAS=uat" >> $GITHUB_OUTPUT
-            echo "✅ Environment detected: UAT"
           elif [[ "$BRANCH" == "integration" ]]; then
             echo "ENV_NAME=INTEGRATION" >> $GITHUB_OUTPUT
             echo "ORG_ALIAS=integration" >> $GITHUB_OUTPUT
             echo "✅ Environment detected: INTEGRATION"
           else
             echo "❌ Error: Branch $BRANCH is not configured for CI/CD"
-            echo "Only integration, uat, and main branches trigger deployments"
+            echo "Only integration and main branches trigger deployments"
             exit 1
           fi
 
