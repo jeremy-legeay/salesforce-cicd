@@ -31,18 +31,13 @@ git config --list
 
 ### Créer les branches principales (une seule fois)
 ```bash
-# Créer develop depuis main
+# Créer integration depuis main
 git checkout main
-git checkout -b develop
-git push origin develop
-
-# Créer integration depuis develop
 git checkout -b integration
 git push origin integration
 
-# Créer uat depuis integration
-git checkout -b uat
-git push origin uat
+# Note : Les branches preprod et main sont gérées via les release branches
+# Voir RELEASE_PROCESS.md pour plus de détails
 ```
 
 ---
@@ -52,9 +47,9 @@ git push origin uat
 ### 1. Commencer une nouvelle fonctionnalité
 
 ```bash
-# Se placer sur develop et récupérer les dernières modifications
-git checkout develop
-git pull origin develop
+# Se placer sur integration et récupérer les dernières modifications
+git checkout integration
+git pull origin integration
 
 # Créer une nouvelle branche de feature
 git checkout -b feature/JIRA-123-add-validation-rule
@@ -89,7 +84,7 @@ git push origin feature/JIRA-123-add-validation-rule
 ```bash
 # Après le push, GitHub affichera un lien pour créer une PR
 # Ou allez sur GitHub UI : Pull Requests > New Pull Request
-# Base: develop <- Compare: feature/JIRA-123-add-validation-rule
+# Base: integration <- Compare: feature/JIRA-123-add-validation-rule
 ```
 
 ### 4. Après merge : nettoyer
@@ -101,9 +96,9 @@ git branch -d feature/JIRA-123-add-validation-rule
 # Supprimer la branche remote (si pas automatique)
 git push origin --delete feature/JIRA-123-add-validation-rule
 
-# Mettre à jour develop
-git checkout develop
-git pull origin develop
+# Mettre à jour integration
+git checkout integration
+git pull origin integration
 ```
 
 ---
@@ -127,7 +122,7 @@ git branch -v
 
 ```bash
 # Changer vers une branche existante
-git checkout develop
+git checkout integration
 
 # Créer et changer vers une nouvelle branche
 git checkout -b feature/new-feature
@@ -138,36 +133,24 @@ git checkout -b feature/new-feature integration
 
 ### Promouvoir entre environnements
 
-#### Develop → Integration
+**Note** : Le système utilise des release branches pour PREPROD et PRODUCTION.
+Consultez [RELEASE_PROCESS.md](RELEASE_PROCESS.md) pour le workflow complet.
+
+#### Via Releases (recommandé)
 ```bash
-git checkout integration
-git pull origin integration
-git merge develop
-git push origin integration
+# 1. Créer une release depuis integration via GitHub Actions
+#    Actions → Create Release Package
 
-# Vérifiez qu'il n'y a pas de conflits
-# Allez sur GitHub Actions pour voir le déploiement
-```
+# 2. Déployer sur PREPROD via GitHub Actions
+#    Actions → Deploy Release to Environment → Target: PREPROD
 
-#### Integration → UAT
-```bash
-git checkout uat
-git pull origin uat
-git merge integration
-git push origin uat
+# 3. Déployer sur PRODUCTION via GitHub Actions
+#    Actions → Deploy Release to Environment → Target: PRODUCTION
 
-# Attendez les 2 approbations dans GitHub Actions
-```
-
-#### UAT → Production
-```bash
-git checkout main
-git pull origin main
-git merge uat
-git push origin main
-
-# ⚠️ ATTENTION: Déploiement en PRODUCTION
-# Attendez les 2+ approbations + timer de 10 minutes
+# 4. Après déploiement PRODUCTION, synchroniser main
+git checkout release/v1.2.0
+git push origin release/v1.2.0
+# Puis merger via PR : release/v1.2.0 → main
 ```
 
 ### Synchroniser les branches
@@ -191,7 +174,7 @@ git pull --all
 ### Détecter les conflits
 
 ```bash
-git merge develop
+git merge integration
 # Auto-merging file.cls
 # CONFLICT (content): Merge conflict in force-app/main/default/classes/MyClass.cls
 # Automatic merge failed; fix conflicts and then commit the result.
@@ -208,7 +191,7 @@ git status
 # Votre version
 # =======
 # Leur version
-# >>>>>>> develop
+# >>>>>>> integration
 
 # 3. Éditer manuellement pour garder la bonne version
 
@@ -256,10 +239,10 @@ git log -5
 git diff
 
 # Différences entre deux branches
-git diff develop..integration
+git diff integration..integration
 
 # Différences d'un fichier spécifique
-git diff develop..integration -- manifest/package.xml
+git diff integration..integration -- manifest/package.xml
 ```
 
 ### Stash (mettre de côté des modifications)
@@ -288,7 +271,7 @@ git stash drop stash@{0}
 git cherry-pick <commit-hash>
 
 # Exemple : récupérer un hotfix
-git checkout develop
+git checkout integration
 git cherry-pick abc1234
 ```
 
@@ -353,7 +336,7 @@ git push origin votre-branche
 # À utiliser UNIQUEMENT sur vos branches personnelles
 git push origin feature/ma-branche --force
 
-# ❌ JAMAIS sur develop, integration, uat ou main
+# ❌ JAMAIS sur integration, integration, preprod ou main
 ```
 
 ### Récupérer une branche supprimée
@@ -370,7 +353,7 @@ git checkout -b feature/recovered <commit-hash>
 
 ```bash
 # Supprimer les branches locales déjà mergées
-git branch --merged develop | grep -v "develop" | xargs git branch -d
+git branch --merged integration | grep -v "integration" | xargs git branch -d
 
 # Nettoyer les références remote obsolètes
 git remote prune origin
@@ -421,12 +404,12 @@ git commit -m "various changes"
 
 ```bash
 # Chaque matin
-git checkout develop
-git pull origin develop
+git checkout integration
+git pull origin integration
 
 # Avant de créer une PR
 git checkout feature/ma-branche
-git pull origin develop
+git pull origin integration
 # Résoudre les conflits si nécessaire
 ```
 
@@ -464,8 +447,8 @@ git clean -fd           # Supprimer fichiers non trackés
 ### "Je suis perdu, comment revenir à un état propre ?"
 ```bash
 git stash               # Sauvegarder les modifications
-git checkout develop    # Retour sur develop
-git pull origin develop # Mise à jour
+git checkout integration    # Retour sur integration
+git pull origin integration # Mise à jour
 ```
 
 ### "J'ai committé sur la mauvaise branche !"

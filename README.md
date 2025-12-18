@@ -17,11 +17,18 @@ Pipeline complet de CI/CD pour déployer sur Salesforce avec un système de rele
 
 ### Environnements
 
+Le système est configuré avec **3 environnements obligatoires** :
+
 | Environnement | Branche | Org Salesforce | Déploiement | Reviewers |
 |--------------|---------|----------------|-------------|-----------|
 | **INTEGRATION** | `integration` | Integration Sandbox | Automatique sur PR/Push | 1 |
-| **UAT** | Release branches | UAT Sandbox | Manuel via Actions | 2 |
+| **PREPROD** | Release branches | Pré-production Sandbox | Manuel via Actions | 2 |
 | **PRODUCTION** | `main` | Production | Manuel via Actions | 2+ |
+
+**Note importante** : PREPROD n'a **pas de branche dédiée**. Les déploiements PREPROD se font manuellement via le workflow [`Deploy Release to Environment`](.github/workflows/deploy-release.yml) en utilisant des **release branches** (`release/vX.Y.Z`). Cela garantit que le **même package** exact est déployé sur PREPROD puis PRODUCTION.
+
+**Besoin d'environnements supplémentaires ?** (QA, STAGING, etc.)
+Consultez le guide [AJOUT_ENVIRONNEMENT.md](AJOUT_ENVIRONNEMENT.md) pour ajouter facilement des environnements intermédiaires entre INTEGRATION et PREPROD.
 
 ### Pipeline CI/CD
 
@@ -35,7 +42,7 @@ Pipeline complet de CI/CD pour déployer sur Salesforce avec un système de rele
 ┌─────────────────────────────┐
 │  INTEGRATION Sandbox        │
 │  - Déploiement auto         │
-│  - Tests: RunSpecifiedTests │
+│  - Tests: RunLocalTests     │
 └──────────┬──────────────────┘
            │ (manuel - labels)
            ▼
@@ -47,7 +54,7 @@ Pipeline complet de CI/CD pour déployer sur Salesforce avec un système de rele
            │ (manuel)
            ▼
 ┌─────────────────────────────┐
-│  UAT Sandbox                │
+│  PREPROD (Pré-production)   │
 │  - Deploy manuel            │
 │  - Tests: RunLocalTests     │
 └──────────┬──────────────────┘
@@ -55,7 +62,7 @@ Pipeline complet de CI/CD pour déployer sur Salesforce avec un système de rele
            ▼
 ┌─────────────────────────────┐
 │  PRODUCTION                 │
-│  - Même package que UAT     │
+│  - Même package que PREPROD │
 │  - Tests: RunLocalTests     │
 └─────────────────────────────┘
 ```
@@ -70,7 +77,7 @@ Pipeline complet de CI/CD pour déployer sur Salesforce avec un système de rele
 - Compte **GitHub** avec droits admin sur le repository
 - Accès aux **3 orgs Salesforce** :
   - Integration Sandbox
-  - UAT Sandbox
+  - PREPROD Sandbox
   - Production
 
 ### Connaissances requises
@@ -118,7 +125,7 @@ salesforce-cicd/
 │   └── workflows/
 │       ├── salesforce-cicd.yml              # Déploiement auto INTEGRATION
 │       ├── create-release-package.yml       # Création de releases
-│       ├── deploy-release.yml               # Déploiement UAT/PROD
+│       ├── deploy-release.yml               # Déploiement PREPROD/PROD
 │       └── auto-backport-hotfix.yml         # Backport automatique
 ├── force-app/                                # Code source Salesforce
 │   └── main/
@@ -161,12 +168,12 @@ Créer 3 environnements dans **Settings → Environments** :
   - `SF_USERNAME_INTEGRATION`
   - `SF_PRIVATE_KEY_INTEGRATION`
 
-#### UAT
+#### PREPROD
 - **Protection rules** : 2 reviewers required
 - **Secrets** :
-  - `SF_CONSUMER_KEY_UAT`
-  - `SF_USERNAME_UAT`
-  - `SF_PRIVATE_KEY_UAT`
+  - `SF_CONSUMER_KEY_PREPROD`
+  - `SF_USERNAME_PREPROD`
+  - `SF_PRIVATE_KEY_PREPROD`
 
 #### PRODUCTION
 - **Protection rules** : 2 reviewers required
@@ -215,19 +222,19 @@ Le workflow crée :
 - Un manifest avec les métadonnées des PRs labelisées
 - Une GitHub Release (draft)
 
-### Déployer sur UAT
+### Déployer sur PREPROD
 
 1. **Aller dans Actions** → `Deploy Release to Environment`
 2. **Run workflow** avec :
    - **Release version** : `v1.2.0`
-   - **Target environment** : `UAT`
+   - **Target environment** : `PREPROD`
 
 ### Déployer sur PRODUCTION
 
-1. **Tester sur UAT** ✅
+1. **Tester sur PREPROD** ✅
 2. **Aller dans Actions** → `Deploy Release to Environment`
 3. **Run workflow** avec :
-   - **Release version** : `v1.2.0` (même version que UAT)
+   - **Release version** : `v1.2.0` (même version que PREPROD)
    - **Target environment** : `PRODUCTION`
 
 ### Hotfixes
@@ -338,6 +345,7 @@ Ce projet contient plusieurs guides pour vous aider :
 
 ### Configuration
 - **[JWT_SETUP_GUIDE.md](JWT_SETUP_GUIDE.md)** - Configuration de l'authentification JWT
+- **[AJOUT_ENVIRONNEMENT.md](AJOUT_ENVIRONNEMENT.md)** - Guide pour ajouter des environnements intermédiaires (QA, STAGING, etc.)
 - **[BEST_PRACTICES.md](BEST_PRACTICES.md)** - Bonnes pratiques Salesforce CI/CD
 
 ### Processus

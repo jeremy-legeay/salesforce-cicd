@@ -26,7 +26,7 @@ sf apex run test --target-org dev-sandbox --test-level RunLocalTests
 ```
 
 ### 3. **Pull Requests obligatoires**
-- Jamais de push direct sur `develop`, `integration`, `uat` ou `main`
+- Jamais de push direct sur `integration`, `preprod` ou `main`
 - Toujours passer par une Pull Request
 - Code review systématique
 - Tests automatiques passent avant merge
@@ -237,7 +237,7 @@ sf org logout --target-org alias-name
 - [ ] Documentation à jour
 - [ ] Changelog mis à jour
 - [ ] Plan de rollback préparé
-- [ ] Validation réussie sur UAT
+- [ ] Validation réussie sur PREPROD
 - [ ] Communication aux utilisateurs
 - [ ] Fenêtre de maintenance planifiée
 - [ ] Backup de la production effectué
@@ -293,7 +293,7 @@ sf apex get test --test-run-id <testRunId>
 ## 🔄 Maintenance régulière
 
 ### Hebdomadaire
-- Merger develop vers integration
+- Synchroniser integration avec les changements récents
 - Nettoyer les branches obsolètes
 - Vérifier les PRs en attente
 
@@ -351,12 +351,13 @@ sf apex run test --tests MyTestClass --target-org dev-sandbox
 ### Automatisation
 
 ```bash
-# Script pour mettre à jour tous les environnements
-for env in dev integration uat; do
-    git checkout $env
-    git merge develop
-    git push origin $env
-done
+# Script pour synchroniser les environnements
+# Note : Utiliser les PRs et workflows GitHub Actions pour les déploiements réels
+
+# Synchroniser integration avec main après un déploiement PRODUCTION
+git checkout integration
+git pull origin main
+git push origin integration
 ```
 
 ## 🎓 Formation de l'équipe
