@@ -6,28 +6,51 @@
 public with sharing class CriticalProductionFix {
 
     /**
-     * @description Correction du bug de calcul de prix qui causait des erreurs
-     * @param productId ID du produit
-     * @return Decimal Prix corrigé
+     * @description Validation du nom de produit avec gestion des cas edge
+     * AVANT (bug) : Acceptait des noms vides ou null, causant des erreurs
+     * APRÈS (fix) : Validation stricte ajoutée
+     * @param productName Nom du produit à valider
+     * @return Boolean true si valide, sinon exception
      */
-    public static Decimal calculateCorrectPrice(Id productId) {
-        // AVANT (bug) : La division par zéro n'était pas gérée
-        // APRÈS (fix) : Validation ajoutée pour éviter division par zéro
-
-        Product2 product = [SELECT Id, Quantity__c, TotalPrice__c
-                           FROM Product2
-                           WHERE Id = :productId
-                           LIMIT 1];
-
-        // FIX CRITIQUE : Vérifier que la quantité n'est pas nulle
-        if (product.Quantity__c == null || product.Quantity__c == 0) {
-            throw new ProductException('Quantité invalide pour le produit ' + productId);
+    public static Boolean validateProductName(String productName) {
+        // FIX CRITIQUE : Vérifier que le nom n'est pas vide ou null
+        if (String.isBlank(productName)) {
+            throw new ProductException('Le nom du produit ne peut pas être vide');
         }
 
-        // Calcul sécurisé du prix unitaire
-        Decimal unitPrice = product.TotalPrice__c / product.Quantity__c;
+        // FIX : Vérifier la longueur minimale (évite les noms trop courts)
+        if (productName.trim().length() < 3) {
+            throw new ProductException('Le nom du produit doit contenir au moins 3 caractères');
+        }
 
-        return unitPrice;
+        // FIX : Vérifier les caractères spéciaux dangereux
+        if (productName.contains('<') || productName.contains('>')) {
+            throw new ProductException('Le nom du produit contient des caractères invalides');
+        }
+
+        return true;
+    }
+
+    /**
+     * @description Récupère un produit de manière sécurisée
+     * @param productId ID du produit
+     * @return Product2 Le produit trouvé
+     */
+    public static Product2 getProductSafely(Id productId) {
+        if (productId == null) {
+            throw new ProductException('Product ID cannot be null');
+        }
+
+        List<Product2> products = [SELECT Id, Name, IsActive, ProductCode
+                                   FROM Product2
+                                   WHERE Id = :productId
+                                   LIMIT 1];
+
+        if (products.isEmpty()) {
+            throw new ProductException('Product not found: ' + productId);
+        }
+
+        return products[0];
     }
 
     /**
