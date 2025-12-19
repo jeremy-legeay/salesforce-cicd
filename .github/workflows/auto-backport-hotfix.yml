@@ -40,11 +40,9 @@ jobs:
           echo "Source: ${SOURCE_BRANCH}"
           echo "Title: ${PR_TITLE}"
 
-          # Récupérer la branche integration
           git fetch origin ${TARGET_BRANCH}
           git checkout ${TARGET_BRANCH}
 
-          # Créer la branche de backport
           git checkout -b ${BACKPORT_BRANCH}
 
           echo "backport_branch=${BACKPORT_BRANCH}" >> $GITHUB_OUTPUT
@@ -55,7 +53,6 @@ jobs:
         id: cherry-pick
         continue-on-error: true
         run: |
-          # Récupérer le merge commit de la PR
           MERGE_COMMIT=${{ github.event.pull_request.merge_commit_sha }}
 
           echo "Cherry-picking commit: ${MERGE_COMMIT}"
@@ -86,32 +83,29 @@ jobs:
           PR_TITLE="${{ steps.create-backport.outputs.pr_title }}"
           BACKPORT_BRANCH="${{ steps.create-backport.outputs.backport_branch }}"
 
-          BODY="## 🔄 Automatic Backport
-
-This PR backports the changes from #${PR_NUMBER} to \`integration\`.
-
-### Original PR
-- **Title:** ${PR_TITLE}
-- **Number:** #${PR_NUMBER}
-- **Branch:** ${{ github.event.pull_request.head.ref }}
-
-### Why this backport?
-Hotfixes applied to release branches must be backported to \`integration\` to ensure:
-- ORG INTEGRATION stays up-to-date
-- Future releases include this fix
-- No code is lost
-
-### Review
-Please review and merge to complete the backport process.
-
----
-🤖 Automated backport created by GitHub Actions"
+          echo "## Automatic Backport" > /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "This PR backports the changes from #${PR_NUMBER} to integration." >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "### Original PR" >> /tmp/pr_body.md
+          echo "- **Title:** ${PR_TITLE}" >> /tmp/pr_body.md
+          echo "- **Number:** #${PR_NUMBER}" >> /tmp/pr_body.md
+          echo "- **Branch:** ${{ github.event.pull_request.head.ref }}" >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "### Why this backport?" >> /tmp/pr_body.md
+          echo "Hotfixes applied to release branches must be backported to integration to ensure:" >> /tmp/pr_body.md
+          echo "- Integration org stays up-to-date" >> /tmp/pr_body.md
+          echo "- Future releases include this fix" >> /tmp/pr_body.md
+          echo "- No code is lost" >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "### Review" >> /tmp/pr_body.md
+          echo "Please review and merge to complete the backport process." >> /tmp/pr_body.md
 
           gh pr create \
             --base integration \
             --head ${BACKPORT_BRANCH} \
             --title "[Backport] ${PR_TITLE} (from #${PR_NUMBER})" \
-            --body "$BODY" \
+            --body-file /tmp/pr_body.md \
             --label "backport" \
             --label "hotfix"
 
@@ -124,31 +118,28 @@ Please review and merge to complete the backport process.
         run: |
           PR_NUMBER=${{ steps.create-backport.outputs.pr_number }}
 
-          COMMENT="## ⚠️ Automatic Backport Failed
+          echo "## Automatic Backport Failed" > /tmp/comment.md
+          echo "" >> /tmp/comment.md
+          echo "The automatic backport of this PR to integration failed due to conflicts." >> /tmp/comment.md
+          echo "" >> /tmp/comment.md
+          echo "### Manual action required:" >> /tmp/comment.md
+          echo "1. Checkout integration branch" >> /tmp/comment.md
+          echo "2. Create a new branch: backport/pr-${PR_NUMBER}-to-integration" >> /tmp/comment.md
+          echo "3. Manually cherry-pick or apply the changes from this PR" >> /tmp/comment.md
+          echo "4. Resolve conflicts" >> /tmp/comment.md
+          echo "5. Create a PR to integration" >> /tmp/comment.md
+          echo "" >> /tmp/comment.md
+          echo "### Commands:" >> /tmp/comment.md
+          echo '```bash' >> /tmp/comment.md
+          echo "git checkout integration" >> /tmp/comment.md
+          echo "git pull" >> /tmp/comment.md
+          echo "git checkout -b backport/pr-${PR_NUMBER}-to-integration" >> /tmp/comment.md
+          echo "git cherry-pick ${{ github.event.pull_request.merge_commit_sha }}" >> /tmp/comment.md
+          echo "# Resolve conflicts if any" >> /tmp/comment.md
+          echo "git push origin backport/pr-${PR_NUMBER}-to-integration" >> /tmp/comment.md
+          echo '```' >> /tmp/comment.md
 
-The automatic backport of this PR to \`integration\` failed due to conflicts.
-
-### Manual action required:
-1. Checkout \`integration\` branch
-2. Create a new branch: \`backport/pr-${PR_NUMBER}-to-integration\`
-3. Manually cherry-pick or apply the changes from this PR
-4. Resolve conflicts
-5. Create a PR to \`integration\`
-
-### Commands:
-\`\`\`bash
-git checkout integration
-git pull
-git checkout -b backport/pr-${PR_NUMBER}-to-integration
-git cherry-pick ${{ github.event.pull_request.merge_commit_sha }}
-# Resolve conflicts if any
-git push origin backport/pr-${PR_NUMBER}-to-integration
-\`\`\`
-
----
-🤖 Automated backport attempted by GitHub Actions"
-
-          gh pr comment ${PR_NUMBER} --body "$COMMENT"
+          gh pr comment ${PR_NUMBER} --body-file /tmp/comment.md
 
           echo "⚠️  Conflict comment posted on PR #${PR_NUMBER}"
 

@@ -2,6 +2,8 @@
 
 Ce guide détaille la configuration de l'authentification JWT pour le pipeline CI/CD.
 
+**Note** : Ce guide couvre les 3 environnements obligatoires (INTEGRATION, PREPROD, PRODUCTION). Si vous devez ajouter des environnements supplémentaires (QA, STAGING, etc.), consultez d'abord [AJOUT_ENVIRONNEMENT.md](AJOUT_ENVIRONNEMENT.md).
+
 ## 📋 Vue d'ensemble
 
 L'authentification JWT (JSON Web Token) est **recommandée par Salesforce** pour les pipelines CI/CD car :
@@ -37,11 +39,11 @@ Email Address []:
 **IMPORTANT** :
 - ✅ Sauvegardez `server.key` dans un gestionnaire de mots de passe sécurisé
 - ✅ Ne commitez JAMAIS `server.key` dans Git (déjà dans `.gitignore`)
-- ✅ Utilisez le MÊME certificat pour les 3 orgs (INT, UAT, PROD)
+- ✅ Utilisez le MÊME certificat pour les 3 orgs (INT, PREPROD, PROD)
 
 ### Étape 2 : Créer une Connected App dans Salesforce
 
-**Pour CHAQUE org** (INTEGRATION, UAT, PRODUCTION) :
+**Pour CHAQUE org** (INTEGRATION, PREPROD, PRODUCTION) :
 
 1. **Setup** → Quick Find → **App Manager**
 2. **New Connected App**
@@ -104,7 +106,7 @@ Email Address []:
 
 ### Étape 5 : Configurer les secrets GitHub
 
-**Pour CHAQUE environnement** GitHub (INTEGRATION, UAT, PRODUCTION) :
+**Pour CHAQUE environnement** GitHub (INTEGRATION, PREPROD, PRODUCTION) :
 
 1. **Settings** → **Environments** → **INTEGRATION** (par exemple)
 2. **Add Secret** (créez 3 secrets)
@@ -165,7 +167,7 @@ MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...
 | Environnement | Consumer Key | Username | Private Key |
 |--------------|-------------|----------|-------------|
 | INTEGRATION | `SF_CONSUMER_KEY_INTEGRATION` | `SF_USERNAME_INTEGRATION` | `SF_PRIVATE_KEY_INTEGRATION` |
-| UAT | `SF_CONSUMER_KEY_UAT` | `SF_USERNAME_UAT` | `SF_PRIVATE_KEY_UAT` |
+| PREPROD | `SF_CONSUMER_KEY_PREPROD` | `SF_USERNAME_PREPROD` | `SF_PRIVATE_KEY_PREPROD` |
 | PRODUCTION | `SF_CONSUMER_KEY_PRODUCTION` | `SF_USERNAME_PRODUCTION` | `SF_PRIVATE_KEY_PRODUCTION` |
 
 **Total : 9 secrets à configurer**
@@ -252,7 +254,7 @@ Successfully authorized admin@company-int.com with org ID 00D...
 **Solution** :
 1. Vérifiez que les 3 secrets existent dans l'environnement GitHub
 2. Vérifiez les noms des secrets (sensible à la casse)
-3. Vérifiez que les secrets sont dans le bon environnement (INTEGRATION, UAT, PRODUCTION)
+3. Vérifiez que les secrets sont dans le bon environnement (INTEGRATION, PREPROD, PRODUCTION)
 
 ### Erreur : "Failed to read jwt key file"
 
