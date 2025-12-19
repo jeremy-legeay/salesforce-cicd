@@ -119,7 +119,7 @@ feature/ma-fonctionnalite → PR → integration → ORG INTEGRATION (automatiqu
 Si un bug est découvert sur PREPROD ou PRODUCTION après une release :
 
 1. **Créer une branche depuis la release** :
-   ```
+   ```bash
    git checkout release/v1.2.0
    git checkout -b hotfix/fix-bug-critique
    ```
@@ -130,15 +130,34 @@ Si un bug est découvert sur PREPROD ou PRODUCTION après une release :
    - Base: `release/v1.2.0`
    - Head: `hotfix/fix-bug-critique`
 
-4. **Merger la PR**
+4. **Validation automatique** 🤖 :
+   - Le workflow `Validate Hotfix PR` se déclenche automatiquement
+   - **Validation sur PREPROD** (dry-run + RunLocalTests)
+   - **Validation sur PRODUCTION** (dry-run + RunLocalTests)
+   - Commentaires automatiques sur la PR avec résultats
+   - ✅ La PR ne peut être mergée que si les 2 validations passent
 
-5. **Backport automatique** 🤖 :
+5. **Merger la PR** (après validation réussie)
+
+6. **Backport automatique** 🤖 :
    - Le workflow `Auto-Backport Hotfix` se déclenche automatiquement
    - Il crée une branche `backport/pr-XX-to-integration`
    - Il cherry-pick le commit
    - Il crée une PR vers `integration`
 
-6. **Reviewer et merger** la PR de backport
+7. **Reviewer et merger** la PR de backport
+
+8. **Re-déployer** la release mise à jour :
+   - Actions → `Deploy Release to Environment` → PREPROD
+   - Tests sur PREPROD
+   - Actions → `Deploy Release to Environment` → PRODUCTION
+
+### ✅ Avantages de la validation automatique
+
+- **Détection précoce** : Les erreurs sont détectées avant le merge
+- **Gain de temps** : Validation IDs générés pour quick deploy
+- **Confiance** : Le hotfix est testé sur PREPROD et PROD avant merge
+- **Traçabilité** : Commentaires automatiques sur la PR avec résultats détaillés
 
 ### En cas de conflits
 
