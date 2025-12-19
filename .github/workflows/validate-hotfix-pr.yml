@@ -1,0 +1,315 @@
+name: Validate Hotfix PR
+
+# Workflow pour valider les PRs de hotfix vers les release branches
+# Valide automatiquement sur PREPROD et PRODUCTION avant merge
+
+on:
+  pull_request:
+    branches:
+      - 'release/**'
+
+env:
+  SFDX_CLI_VERSION: latest
+
+jobs:
+  # Job 1: Valider sur PREPROD
+  validate-preprod:
+    name: Validate on PREPROD
+    runs-on: ubuntu-latest
+    environment: PREPROD
+    outputs:
+      validation_id_preprod: ${{ steps.validate.outputs.job_id }}
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Authenticate to PREPROD
+        env:
+          SF_CONSUMER_KEY: ${{ secrets.SF_CONSUMER_KEY_PREPROD }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME_PREPROD }}
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY_PREPROD }}
+        run: |
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for PREPROD"
+            echo "Please configure these secrets in GitHub Settings > Environments > PREPROD:"
+            echo "  - SF_CONSUMER_KEY_PREPROD"
+            echo "  - SF_USERNAME_PREPROD"
+            echo "  - SF_PRIVATE_KEY_PREPROD"
+            exit 1
+          fi
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias preprod \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
+
+      - name: Validate deployment on PREPROD (dry-run)
+        id: validate
+        run: |
+          set +e  # Don't exit on error, we want to capture the output
+
+          # Déterminer le manifest à utiliser
+          RELEASE_VERSION=$(echo "${{ github.base_ref }}" | sed 's|release/||')
+          MANIFEST="manifest/releases/${RELEASE_VERSION}.xml"
+
+          if [ -f "$MANIFEST" ]; then
+            echo "📦 Using release manifest: $MANIFEST"
+          else
+            echo "📦 Using default manifest: manifest/package.xml"
+            MANIFEST="manifest/package.xml"
+          fi
+
+          echo "🧪 Running validation with RunLocalTests on PREPROD"
+
+          RESULT=$(sf project deploy start \
+            --target-org preprod \
+            --manifest "$MANIFEST" \
+            --test-level RunLocalTests \
+            --dry-run \
+            --wait 30 \
+            --verbose \
+            --json 2>&1)
+
+          EXIT_CODE=$?
+
+          echo "📋 Validation output:"
+          echo "$RESULT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ PREPROD validation failed with exit code: $EXIT_CODE"
+            echo "Error details:"
+            echo "$RESULT" | jq '.' || echo "$RESULT"
+            exit $EXIT_CODE
+          fi
+
+          JOB_ID=$(echo "$RESULT" | jq -r '.result.id')
+
+          if [ "$JOB_ID" == "null" ] || [ -z "$JOB_ID" ]; then
+            echo "❌ Failed to extract Job ID from result"
+            echo "Full result:"
+            echo "$RESULT" | jq '.'
+            exit 1
+          fi
+
+          echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
+          echo "✅ PREPROD Validation ID: $JOB_ID"
+
+      - name: Comment PR with PREPROD validation result
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `## ✅ PREPROD Validation Successful
+
+            **Hotfix PR validation completed on PREPROD**
+
+            - 🎯 **Environment**: PREPROD
+            - 📦 **Release**: ${{ github.base_ref }}
+            - ✅ **Status**: Validation passed
+            - 🔑 **Validation ID**: \`${{ steps.validate.outputs.job_id }}\`
+            - 🧪 **Tests**: RunLocalTests executed successfully
+
+            **Next step**: Validation on PRODUCTION will run automatically.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # Job 2: Valider sur PRODUCTION
+  validate-production:
+    name: Validate on PRODUCTION
+    needs: validate-preprod
+    runs-on: ubuntu-latest
+    environment: PRODUCTION
+    outputs:
+      validation_id_production: ${{ steps.validate.outputs.job_id }}
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Authenticate to PRODUCTION
+        env:
+          SF_CONSUMER_KEY: ${{ secrets.SF_CONSUMER_KEY_PRODUCTION }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME_PRODUCTION }}
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY_PRODUCTION }}
+        run: |
+          if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
+            echo "❌ Error: JWT secrets not configured for PRODUCTION"
+            echo "Please configure these secrets in GitHub Settings > Environments > PRODUCTION:"
+            echo "  - SF_CONSUMER_KEY_PRODUCTION"
+            echo "  - SF_USERNAME_PRODUCTION"
+            echo "  - SF_PRIVATE_KEY_PRODUCTION"
+            exit 1
+          fi
+
+          echo "${SF_PRIVATE_KEY}" > server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias production \
+            --instance-url https://login.salesforce.com
+
+          rm server.key
+
+      - name: Validate deployment on PRODUCTION (dry-run)
+        id: validate
+        run: |
+          set +e  # Don't exit on error, we want to capture the output
+
+          # Déterminer le manifest à utiliser
+          RELEASE_VERSION=$(echo "${{ github.base_ref }}" | sed 's|release/||')
+          MANIFEST="manifest/releases/${RELEASE_VERSION}.xml"
+
+          if [ -f "$MANIFEST" ]; then
+            echo "📦 Using release manifest: $MANIFEST"
+          else
+            echo "📦 Using default manifest: manifest/package.xml"
+            MANIFEST="manifest/package.xml"
+          fi
+
+          echo "🧪 Running validation with RunLocalTests on PRODUCTION"
+
+          RESULT=$(sf project deploy start \
+            --target-org production \
+            --manifest "$MANIFEST" \
+            --test-level RunLocalTests \
+            --dry-run \
+            --wait 30 \
+            --verbose \
+            --json 2>&1)
+
+          EXIT_CODE=$?
+
+          echo "📋 Validation output:"
+          echo "$RESULT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ PRODUCTION validation failed with exit code: $EXIT_CODE"
+            echo "Error details:"
+            echo "$RESULT" | jq '.' || echo "$RESULT"
+            exit $EXIT_CODE
+          fi
+
+          JOB_ID=$(echo "$RESULT" | jq -r '.result.id')
+
+          if [ "$JOB_ID" == "null" ] || [ -z "$JOB_ID" ]; then
+            echo "❌ Failed to extract Job ID from result"
+            echo "Full result:"
+            echo "$RESULT" | jq '.'
+            exit 1
+          fi
+
+          echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
+          echo "✅ PRODUCTION Validation ID: $JOB_ID"
+
+      - name: Comment PR with PRODUCTION validation result
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `## ✅ PRODUCTION Validation Successful
+
+            **Hotfix PR validation completed on PRODUCTION**
+
+            - 🎯 **Environment**: PRODUCTION
+            - 📦 **Release**: ${{ github.base_ref }}
+            - ✅ **Status**: Validation passed
+            - 🔑 **Validation ID**: \`${{ steps.validate.outputs.job_id }}\`
+            - 🧪 **Tests**: RunLocalTests executed successfully
+
+            ---
+
+            ## 🎉 All Validations Passed!
+
+            ✅ **PREPROD**: Validation ID \`${{ needs.validate-preprod.outputs.validation_id_preprod }}\`
+            ✅ **PRODUCTION**: Validation ID \`${{ steps.validate.outputs.job_id }}\`
+
+            **This hotfix is ready to be merged and deployed!**
+
+            ### Next steps after merge:
+            1. ✅ Automatic backport to \`integration\` will be triggered
+            2. 🚀 Re-deploy release ${{ github.base_ref }} on PREPROD using \`Deploy Release to Environment\` workflow
+            3. 🚀 Deploy to PRODUCTION after PREPROD validation`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # Job 3: Summary
+  summary:
+    name: Validation Summary
+    needs: [validate-preprod, validate-production]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🔥 Hotfix PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PR**: #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Release**: ${{ github.base_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Hotfix Branch**: ${{ github.head_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.validate-preprod.result }}" == "success" ]]; then
+            echo "✅ **PREPROD**: Validation passed (ID: \`${{ needs.validate-preprod.outputs.validation_id_preprod }}\`)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **PREPROD**: Validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.validate-production.result }}" == "success" ]]; then
+            echo "✅ **PRODUCTION**: Validation passed (ID: \`${{ needs.validate-production.outputs.validation_id_production }}\`)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **PRODUCTION**: Validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.validate-preprod.result }}" == "success" ]] && [[ "${{ needs.validate-production.result }}" == "success" ]]; then
+            echo "🎉 **All validations passed! This hotfix is ready to merge.**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Some validations failed. Please fix the errors before merging.**" >> $GITHUB_STEP_SUMMARY
+          fi
