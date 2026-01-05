@@ -44,25 +44,45 @@ jobs:
         run: |
           if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
             echo "❌ Error: JWT secrets not configured for PREPROD"
-            echo "Please configure these secrets in GitHub Settings > Environments > PREPROD:"
+            echo "Please configure these secrets in GitHub Settings > Repository secrets:"
             echo "  - SF_CONSUMER_KEY_PREPROD"
             echo "  - SF_USERNAME_PREPROD"
             echo "  - SF_PRIVATE_KEY_PREPROD"
             exit 1
           fi
 
+          echo "✅ All JWT secrets are configured"
+          echo "📋 Consumer Key: ${SF_CONSUMER_KEY:0:20}..."
+          echo "📋 Username: ${SF_USERNAME}"
+
+          # Écrire la clé privée dans un fichier temporaire
           echo "${SF_PRIVATE_KEY}" > server.key
           chmod 600 server.key
 
+          # Vérifier le format de la clé
+          echo "🔍 Checking private key format..."
+          if head -n 1 server.key | grep -q "BEGIN.*PRIVATE KEY"; then
+            echo "✅ Private key has correct header"
+          else
+            echo "⚠️ Warning: Private key might be missing header"
+            echo "First line: $(head -n 1 server.key)"
+          fi
+
+          echo "📏 Key file size: $(wc -c < server.key) bytes"
+          echo "📏 Key file lines: $(wc -l < server.key) lines"
+
           # PREPROD est une sandbox, donc utiliser test.salesforce.com
+          echo "🔐 Attempting JWT authentication to PREPROD..."
           sf org login jwt \
             --client-id "${SF_CONSUMER_KEY}" \
             --jwt-key-file server.key \
             --username "${SF_USERNAME}" \
             --alias preprod \
-            --instance-url https://test.salesforce.com
+            --instance-url https://test.salesforce.com \
+            --set-default
 
           rm server.key
+          echo "✅ Successfully authenticated to PREPROD"
 
       - name: Validate deployment on PREPROD (dry-run)
         id: validate
@@ -172,25 +192,45 @@ jobs:
         run: |
           if [ -z "${SF_CONSUMER_KEY}" ] || [ -z "${SF_USERNAME}" ] || [ -z "${SF_PRIVATE_KEY}" ]; then
             echo "❌ Error: JWT secrets not configured for PRODUCTION"
-            echo "Please configure these secrets in GitHub Settings > Environments > PRODUCTION:"
+            echo "Please configure these secrets in GitHub Settings > Repository secrets:"
             echo "  - SF_CONSUMER_KEY_PRODUCTION"
             echo "  - SF_USERNAME_PRODUCTION"
             echo "  - SF_PRIVATE_KEY_PRODUCTION"
             exit 1
           fi
 
+          echo "✅ All JWT secrets are configured"
+          echo "📋 Consumer Key: ${SF_CONSUMER_KEY:0:20}..."
+          echo "📋 Username: ${SF_USERNAME}"
+
+          # Écrire la clé privée dans un fichier temporaire
           echo "${SF_PRIVATE_KEY}" > server.key
           chmod 600 server.key
 
+          # Vérifier le format de la clé
+          echo "🔍 Checking private key format..."
+          if head -n 1 server.key | grep -q "BEGIN.*PRIVATE KEY"; then
+            echo "✅ Private key has correct header"
+          else
+            echo "⚠️ Warning: Private key might be missing header"
+            echo "First line: $(head -n 1 server.key)"
+          fi
+
+          echo "📏 Key file size: $(wc -c < server.key) bytes"
+          echo "📏 Key file lines: $(wc -l < server.key) lines"
+
           # PRODUCTION est une vraie production, donc utiliser login.salesforce.com
+          echo "🔐 Attempting JWT authentication to PRODUCTION..."
           sf org login jwt \
             --client-id "${SF_CONSUMER_KEY}" \
             --jwt-key-file server.key \
             --username "${SF_USERNAME}" \
             --alias production \
-            --instance-url https://login.salesforce.com
+            --instance-url https://login.salesforce.com \
+            --set-default
 
           rm server.key
+          echo "✅ Successfully authenticated to PRODUCTION"
 
       - name: Validate deployment on PRODUCTION (dry-run)
         id: validate
