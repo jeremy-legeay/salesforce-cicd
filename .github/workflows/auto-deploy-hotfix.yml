@@ -1,0 +1,221 @@
+name: Auto Deploy Hotfix After Merge
+
+# Se déclenche automatiquement quand une PR hotfix est mergée vers une release branch
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'release/**'
+
+env:
+  SFDX_CLI_VERSION: latest
+
+jobs:
+  # Job 1: Valider et déployer sur PREPROD
+  deploy-preprod:
+    name: Deploy to PREPROD
+    # Seulement si la PR a été mergée (pas fermée sans merge)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    environment: PREPROD
+    outputs:
+      validation_id: ${{ steps.validate.outputs.validation_id }}
+
+    steps:
+      - name: Checkout merged code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Authenticate to PREPROD
+        env:
+          SF_CONSUMER_KEY: ${{ secrets.SF_CONSUMER_KEY_PREPROD }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME_PREPROD }}
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY_PREPROD }}
+        run: |
+          echo "${SF_PRIVATE_KEY}" > server.key
+          chmod 600 server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias preprod \
+            --instance-url https://test.salesforce.com \
+            --set-default
+
+          rm server.key
+
+      - name: Validate on PREPROD (get Validation ID)
+        id: validate
+        run: |
+          RELEASE_VERSION=$(echo "${{ github.event.pull_request.base.ref }}" | sed 's|release/||')
+          MANIFEST="manifest/releases/${RELEASE_VERSION}.xml"
+
+          if [ ! -f "$MANIFEST" ]; then
+            MANIFEST="manifest/package.xml"
+          fi
+
+          echo "🔍 Validating with manifest: $MANIFEST"
+
+          RESULT=$(sf project deploy start \
+            --target-org preprod \
+            --manifest "$MANIFEST" \
+            --test-level RunLocalTests \
+            --dry-run \
+            --wait 30 \
+            --json 2>&1)
+
+          VALIDATION_ID=$(echo "$RESULT" | jq -r '.result.id')
+          echo "validation_id=$VALIDATION_ID" >> $GITHUB_OUTPUT
+          echo "✅ Validation ID: $VALIDATION_ID"
+
+      - name: Quick Deploy to PREPROD
+        run: |
+          echo "🚀 Quick deploying to PREPROD..."
+
+          sf project deploy quick \
+            --job-id "${{ steps.validate.outputs.validation_id }}" \
+            --target-org preprod \
+            --wait 10
+
+          echo "✅ Successfully deployed hotfix to PREPROD"
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `## 🚀 Hotfix Deployed to PREPROD
+
+            **Release**: ${{ github.event.pull_request.base.ref }}
+            **Validation ID**: \`${{ steps.validate.outputs.validation_id }}\`
+            **Status**: ✅ Successfully deployed
+
+            Next: Production deployment will run automatically.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # Job 2: Valider et déployer sur PRODUCTION
+  deploy-production:
+    name: Deploy to PRODUCTION
+    needs: deploy-preprod
+    runs-on: ubuntu-latest
+    environment: PRODUCTION
+    outputs:
+      validation_id: ${{ steps.validate.outputs.validation_id }}
+
+    steps:
+      - name: Checkout merged code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Salesforce CLI
+        run: |
+          npm install -g @salesforce/cli@${SFDX_CLI_VERSION}
+          sf --version
+
+      - name: Authenticate to PRODUCTION
+        env:
+          SF_CONSUMER_KEY: ${{ secrets.SF_CONSUMER_KEY_PRODUCTION }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME_PRODUCTION }}
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY_PRODUCTION }}
+        run: |
+          echo "${SF_PRIVATE_KEY}" > server.key
+          chmod 600 server.key
+
+          sf org login jwt \
+            --client-id "${SF_CONSUMER_KEY}" \
+            --jwt-key-file server.key \
+            --username "${SF_USERNAME}" \
+            --alias production \
+            --instance-url https://login.salesforce.com \
+            --set-default
+
+          rm server.key
+
+      - name: Validate on PRODUCTION (get Validation ID)
+        id: validate
+        run: |
+          RELEASE_VERSION=$(echo "${{ github.event.pull_request.base.ref }}" | sed 's|release/||')
+          MANIFEST="manifest/releases/${RELEASE_VERSION}.xml"
+
+          if [ ! -f "$MANIFEST" ]; then
+            MANIFEST="manifest/package.xml"
+          fi
+
+          echo "🔍 Validating with manifest: $MANIFEST"
+
+          RESULT=$(sf project deploy start \
+            --target-org production \
+            --manifest "$MANIFEST" \
+            --test-level RunLocalTests \
+            --dry-run \
+            --wait 30 \
+            --json 2>&1)
+
+          VALIDATION_ID=$(echo "$RESULT" | jq -r '.result.id')
+          echo "validation_id=$VALIDATION_ID" >> $GITHUB_OUTPUT
+          echo "✅ Validation ID: $VALIDATION_ID"
+
+      - name: Quick Deploy to PRODUCTION
+        run: |
+          echo "🚀 Quick deploying to PRODUCTION..."
+
+          sf project deploy quick \
+            --job-id "${{ steps.validate.outputs.validation_id }}" \
+            --target-org production \
+            --wait 10
+
+          echo "✅ Successfully deployed hotfix to PRODUCTION"
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `## 🎉 Hotfix Deployed to PRODUCTION
+
+            **Release**: ${{ github.event.pull_request.base.ref }}
+            **Validation ID**: \`${{ steps.validate.outputs.validation_id }}\`
+            **Status**: ✅ Successfully deployed
+
+            ---
+
+            ## ✅ Deployment Complete!
+
+            - ✅ **PREPROD**: Deployed (ID: \`${{ needs.deploy-preprod.outputs.validation_id }}\`)
+            - ✅ **PRODUCTION**: Deployed (ID: \`${{ steps.validate.outputs.validation_id }}\`)
+
+            **Next steps**:
+            1. Verify the hotfix works correctly on PRODUCTION
+            2. The automatic backport to \`integration\` should have been created
+            3. Review and merge the backport PR`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
