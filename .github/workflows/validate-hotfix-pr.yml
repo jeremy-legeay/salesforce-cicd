@@ -52,13 +52,15 @@ jobs:
           fi
 
           echo "${SF_PRIVATE_KEY}" > server.key
+          chmod 600 server.key
 
+          # PREPROD est une sandbox, donc utiliser test.salesforce.com
           sf org login jwt \
             --client-id "${SF_CONSUMER_KEY}" \
             --jwt-key-file server.key \
             --username "${SF_USERNAME}" \
             --alias preprod \
-            --instance-url https://login.salesforce.com
+            --instance-url https://test.salesforce.com
 
           rm server.key
 
@@ -178,7 +180,9 @@ jobs:
           fi
 
           echo "${SF_PRIVATE_KEY}" > server.key
+          chmod 600 server.key
 
+          # PRODUCTION est une vraie production, donc utiliser login.salesforce.com
           sf org login jwt \
             --client-id "${SF_CONSUMER_KEY}" \
             --jwt-key-file server.key \
