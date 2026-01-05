@@ -310,6 +310,8 @@ jobs:
 
           if [[ "${{ needs.validate-preprod.result }}" == "success" ]] && [[ "${{ needs.validate-production.result }}" == "success" ]]; then
             echo "🎉 **All validations passed! This hotfix is ready to merge.**" >> $GITHUB_STEP_SUMMARY
+            exit 0
           else
             echo "⚠️ **Some validations failed. Please fix the errors before merging.**" >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
